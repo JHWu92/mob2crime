@@ -42,18 +42,25 @@ stats_dir = 'stats/MexTwUniqUser-VOZ/' if voz_only else 'stats/MexTwUniqUser-VOZ
 if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 
+done_file_date = set([os.path.basename(fn).replace('.json.gz','') for fn in glob.glob(stats_dir+'*.json.gz')])
+
 # loop over the files
 start_dt = datetime.datetime.now()
 logging.info('===============================')
 logging.info('MEX stats starts. Number of files: %d, debugging=%s, VOZ_only=%s' % (len(fns), debugging, voz_only))
 
 for cnt, fn in enumerate(fns):
-    print('working on the %dth file' % cnt)
 
-    logging.info('processing file: %s' % fn.replace(drive_root, ''))
     file_date = fn.replace('.dat', '').replace('.gz', '')[-8:]
     file_date = datetime.datetime.strptime(file_date, '%Y%m%d')
     file_date = file_date.strftime('%Y-%m-%d')
+    if file_date in done_file_date:
+        print('skipping %dth, file_date: %s' % (cnt, file_date))
+        continue
+
+    print('working on the %dth file' % cnt)
+
+    logging.info('processing file: %s' % fn.replace(drive_root, ''))
 
     # for logging processing time per file
     fn_start_dt = datetime.datetime.now()
