@@ -38,7 +38,7 @@ for fn in glob.glob(mex_root + file_pattern):
     fns.append(fn)
 fns = sorted(fns)
 
-stats_dir = 'stats/MexTwUniqUser-VOZ/' if voz_only else 'stats/MexTwUniqUser-VOZENTRANTE/'
+stats_dir = 'stats/MexTwUniqUserVOZ/' if voz_only else 'stats/MexTwUniqUserVOZENTRANTE/'
 if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 
@@ -76,19 +76,22 @@ for cnt, fn in enumerate(fns):
         for i, line in enumerate(f):
             if i > 10 and debugging:
                 break
+            try:
+                line = line.decode('utf8').strip().split('|')
 
-            line = line.decode('utf8').strip().split('|')
+                dt1 = datetime.datetime.strptime(line[idx_date] + ' ' + line[idx_time], '%d/%m/%Y %H:%M:%S')
+                dt2 = dt1 + datetime.timedelta(seconds=int(line[idx_duration]))
 
-            dt1 = datetime.datetime.strptime(line[idx_date] + ' ' + line[idx_time], '%d/%m/%Y %H:%M:%S')
-            dt2 = dt1 + datetime.timedelta(seconds=int(line[idx_duration]))
+                d1 = dt1.strftime('%Y-%m-%d')
+                d1h = dt1.hour
+                d2 = dt2.strftime('%Y-%m-%d')
+                d2h = dt2.hour
 
-            d1 = dt1.strftime('%Y-%m-%d')
-            d1h = dt1.hour
-            d2 = dt2.strftime('%Y-%m-%d')
-            d2h = dt2.hour
+                stats[d1][line[idx_t1]][d1h].add(line[idx_p1])
+                stats[d2][line[idx_t2]][d2h].add(line[idx_p1])
+            except Exception as e:
+                logging.exception('file %s line %d raise %s\nThis line is: %s' % (fn, i, type(e).__name__, line))
 
-            stats[d1][line[idx_t1]][d1h].add(line[idx_p1])
-            stats[d2][line[idx_t2]][d2h].add(line[idx_p1])
         logging.debug('iterated all lines')
         f.close()
     except EOFError as e:
