@@ -108,4 +108,5 @@ src/creds.py
 data/*/
 tmp/
 stats/MexTwUniqUserVOZ
-stats/MexTw08HrUniqCntVOZ
+stats/MexTwHrUniqCntVOZ
+jupyter-8889
