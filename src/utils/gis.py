@@ -1,4 +1,9 @@
+import geopandas as gp
 import numpy as np
+from shapely.geometry import Polygon, box
+from scipy.spatial import Voronoi
+
+
 def voronoi_finite_polygons_2d(vor, radius=None):
     """Reconstruct infinite Voronoi regions in a
     2D diagram to finite regions.
@@ -48,7 +53,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
             direction = np.sign(
                 np.dot(midpoint - center, n)) * n
             far_point = vor.vertices[v2] + \
-                direction * radius
+                        direction * radius
             new_region.append(len(new_vertices))
             new_vertices.append(far_point.tolist())
         # Sort region counterclockwise.
@@ -61,3 +66,25 @@ def voronoi_finite_polygons_2d(vor, radius=None):
             np.argsort(angles)]
         new_regions.append(new_region.tolist())
     return new_regions, np.asarray(new_vertices)
+
+
+def vor2gp(vor, radius=None, dataframe=False, lonlat_bounded=True):
+    regions, vertices = voronoi_finite_polygons_2d(vor, radius=radius)
+    polys = []
+    for r in regions:
+        p = Polygon(vertices[r])
+        if lonlat_bounded:
+           p = p.intersection(box(-180,-90,180,90))
+        polys.append(p)
+    if dataframe:
+        return gp.GeoDataFrame(polys, columns=['geometry'])
+    return gp.GeoSeries(polys)
+
+
+def lonlats2vorpolys(lonlats, radius=None, dataframe=False, lonlat_bounded=True):
+    vor = Voronoi(lonlats)
+    return vor2gp(vor, radius, dataframe, lonlat_bounded)
+
+
+def vorpolys_by_regions(vorpolys, regions):
+    return
