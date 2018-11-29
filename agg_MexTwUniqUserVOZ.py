@@ -38,7 +38,7 @@ for fn in glob.glob(mex_root + file_pattern):
     fns.append(fn)
 fns = sorted(fns)
 
-stats_dir = 'stats/MexTwUniqUserVOZ/' if voz_only else 'stats/MexTwUniqUserVOZENTRANTE/'
+stats_dir = 'stats/AggMexTwUniqUserVOZ/' if voz_only else 'stats/AggMexTwUniqUserVOZENTRANTE/'
 if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 

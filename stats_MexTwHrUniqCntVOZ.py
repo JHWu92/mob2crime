@@ -78,10 +78,10 @@ def update_stat(data, file_date, stats, stats_no_gtid, dates_in_file):
 # storing stats: stats[d][tower][hour] = set of users
 stats = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
 stats_no_gtid = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
-dates_in_file = json.load(open('stats/MexTwUniqUserVOZ/dates_in_file.json'))
+dates_in_file = json.load(open('stats/AggMexTwUniqUserVOZ/dates_in_file.json'))
 
 fns = []
-for fn in glob.glob('stats/MexTwUniqUserVOZ/*.json.gz'):
+for fn in glob.glob('stats/AggMexTwUniqUserVOZ/*.json.gz'):
     fns.append(fn)
 fns = sorted(fns)
 

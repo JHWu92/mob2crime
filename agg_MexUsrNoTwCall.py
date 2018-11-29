@@ -36,7 +36,7 @@ for fn in glob.glob(mex_root + file_pattern):
 fns = sorted(fns)
 
 # In[8]:
-stats_dir = 'stats/MexUsrNoTwCallVOZ/' if voz_only else 'stats/MexUsrNoTwCallVOZENTRANTE/'
+stats_dir = 'stats/AggMexUsrNoTwCallVOZ/' if voz_only else 'stats/AggMexUsrNoTwCallVOZENTRANTE/'
 if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 

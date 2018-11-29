@@ -1,4 +1,4 @@
-﻿# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -107,6 +107,6 @@ venv.bak/
 src/creds.py
 data/*/
 tmp/
-stats/MexTwUniqUserVOZ
+stats/AggMexTwUniqUserVOZ
 stats/MexTwHrUniqCntVOZ
 jupyter-8889
