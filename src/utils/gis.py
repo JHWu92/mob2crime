@@ -3,6 +3,12 @@ import numpy as np
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon, box
 
+def crs_normalization(crs):
+    """if crs is int, meaning it's epsg code, turn it into a dict"""
+    if isinstance(crs, int):
+        crs = {'init': f'epsg:{crs}'}
+    return crs
+
 
 def haversine(lon1, lat1, lon2, lat2):
     """
@@ -105,7 +111,7 @@ def lonlats2vorpolys(lonlats, radius=None, dataframe=False, lonlat_bounded=True)
     return vor2gp(vor, radius, dataframe, lonlat_bounded)
 
 
-def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_epsg=None, area_epsg=None, intersection_only=True):
+def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, area_crs=None, intersection_only=True):
     """Compute the weights of from polygons 1 to polygons 2,
     So that the statistics in polys1 can be transferred to polys2
 
@@ -120,31 +126,35 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_epsg=None, a
         polygons to get statistics from polys1
     :param pname1: column name for the index of polys1 in the output
     :param pname2: column name for the index of polys2 in the output
-    :param cur_epsg: the current epsg of polys1 and polys2
-    :param area_epsg: the epsg for the area computation
+    :param cur_crs: int, string, dict
+        the current CRS of polys1 and polys2 (epsg code, proj4 string, or dictionary of projection parameters)
+    :param area_crs: int, string, dict
+        the equal-area CRS for the area computation
 
     :return: pd.DataFrame(columns=[pname1, pname2, 'weight'])
         the mapping from polys1 to polys2
     """
 
     do_crs_transform = True
+    cur_crs = crs_normalization(cur_crs)
+    area_crs = crs_normalization(area_crs)
 
     # make sure CRS is set correctly
-    if cur_epsg is None and polys1.crs is None and polys2.crs is None:
-        if area_epsg is None:
+    if cur_crs is None and polys1.crs is None and polys2.crs is None:
+        if area_crs is None:
             do_crs_transform = False
             print("No current epsg is specified. Area is computed directed in the current coordinates")
         else:
             raise ValueError('area epsg is specified, but the polygons have no CRS')
 
     if do_crs_transform:
-        if area_epsg is None:
+        if area_crs is None:
             raise ValueError(
-                'Need to do area transform, but area is not specified. '
-                f"cur_epsg is {cur_epsg}, polys1.crs is {polys1.crs}, polys2.crs is {polys2.crs}"
+                "Need to do area transform, but area is not specified. "
+                f"cur_crs is {cur_crs}, polys1.crs is {polys1.crs}, polys2.crs is {polys2.crs}"
             )
-        if polys1.crs is None: polys1.crs = {'init': 'epsg:%d' % cur_epsg, 'no_defs': True}
-        if polys2.crs is None: polys2.crs = {'init': 'epsg:%d' % cur_epsg, 'no_defs': True}
+        if polys1.crs is None: polys1.crs = cur_crs
+        if polys2.crs is None: polys2.crs = cur_crs
 
     # get intersections between polys1 and polys2
     ps1tops2 = gp.sjoin(polys1, polys2)
@@ -157,7 +167,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_epsg=None, a
     # get area of the intersections
     if do_crs_transform:
         itxns.crs = polys1.crs
-        itxns_for_area = itxns.to_crs(epsg=area_epsg)
+        itxns_for_area = itxns.to_crs(area_crs)
     else:
         itxns_for_area = itxns
     itxns['iarea'] = itxns_for_area.geometry.apply(lambda x: x.area)
@@ -167,7 +177,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_epsg=None, a
     if intersection_only:
         polys1_area = itxns.groupby(pname1).apply(lambda x: x['iarea'].sum()).to_frame()
     else:
-        polys1_area = polys1.to_crs(epsg=area_epsg).geometry.apply(lambda x: x.area).to_frame()
+        polys1_area = polys1.to_crs(area_crs).geometry.apply(lambda x: x.area).to_frame()
         polys1_area.index.name = pname1
     polys1_area = polys1_area
     polys1_area.columns = [pname1 + '_area']
