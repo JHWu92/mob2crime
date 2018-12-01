@@ -10,13 +10,47 @@ from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 AREA_CRS = 6362
-REGION_KINDS = ('cities')
+REGION_KINDS = ('cities',)
 
 
-def tower2grids(kind='cities'):
-    if kind not in ('cities',):
-        raise ValueError(f'Regions kind={kind} is not implemented')
-    rgns = globals()[kind]()
+def tower2grid(rkind, side, redo=False):
+    t2g_path = f'data/mex_t2g_{rkind}_{side}m.csv'
+
+    if not redo and os.path.exists(t2g_path):
+        print('reading existing t2g file:', t2g_path)
+        t2g = pd.read_csv(t2g_path, index_col=0)
+        return t2g
+
+    tvor = tower_vor()
+    tname = tvor.index.name
+
+    rs = regions(rkind)
+    rname = rs.index.name
+
+    print('keep tower voronoi within', rkind)
+    t2r = polys2polys(tvor, rs, tname, rname, cur_crs=4326, area_crs=AREA_CRS, intersection_only=True)
+
+    gs = grids(rkind, side)
+
+    print('building tower to grid mapping')
+    t2g = []
+    for n in rs.index:
+        tr = t2r[t2r[rname] == n]
+        gr = gs[gs[rname] == n]
+        tr2gr = polys2polys(tr, gr, pname1='towerInRegion', pname2='grid', cur_crs=4326, area_crs=AREA_CRS,
+                            intersection_only=True)
+        tr2gr = tr2gr.merge(tr[[tname, rname, f'{tname}_area', 'weight']], left_on='towerInRegion', right_index=True)
+        tr2gr.rename(columns={'weight_x': 'w_Grid2towerInRegion', 'weight_y': 'w_towerInRegion',
+                              'iarea': 'gridInTowerInRegion_area'}, inplace=True)
+        tr2gr['weight'] = tr2gr.w_Grid2towerInRegion * tr2gr.w_towerInRegion
+        tr2gr = tr2gr[[rname, tname, 'towerInRegion', 'grid', 'weight', 'w_towerInRegion', 'w_Grid2towerInRegion',
+                       'gridInTowerInRegion_area', 'towerInRegion_area', 'gtid_area', 'geometry', ]]
+        t2g.append(tr2gr[[rname, tname, 'grid', 'weight']])
+
+    t2g = pd.concat(t2g, ignore_index=True).drop(rname, axis=1)
+    print('saving tower to grid mapping:', t2g_path)
+    t2g.to_csv(t2g_path)
+    return t2g
 
 
 def tower_vor(rkind=None):
@@ -57,20 +91,6 @@ def tower():
     return towers_shp
 
 
-def regions(rkind='cities'):
-    if rkind not in REGION_KINDS:
-        raise ValueError(f'Regions kind={rkind} is not implemented, it should be one of {REGION_KINDS}')
-    rgns = globals()[rkind]()
-    return rgns
-
-
-def cities():
-    c = gp.read_file('data/cities_mexico.geojson')
-    c.set_index('cname', inplace=True)
-    c.index.name = 'city'
-    return c
-
-
 def grids(rkind, side, redo=False):
     """
     build grids and save it using gzip, gp.to_json;
@@ -84,7 +104,7 @@ def grids(rkind, side, redo=False):
     import gzip
     rgns = regions(rkind)
     rname = rgns.index.name
-    grid_path = f'data/mex_grid_{rname}_{side}m.geojson.gz'
+    grid_path = f'data/mex_grid_{rkind}_{side}m.geojson.gz'
 
     if not redo and os.path.exists(grid_path):
         print('reading existing grids')
@@ -97,3 +117,17 @@ def grids(rkind, side, redo=False):
     with gzip.open(grid_path, 'wt') as fout:
         fout.write(g.to_json())
     return g
+
+
+def regions(rkind='cities'):
+    if rkind not in REGION_KINDS:
+        raise ValueError(f'Regions kind={rkind} is not implemented, it should be one of {REGION_KINDS}')
+    rgns = globals()[rkind]()
+    return rgns
+
+
+def cities():
+    c = gp.read_file('data/cities_mexico.geojson')
+    c.set_index('cname', inplace=True)
+    c.index.name = 'city'
+    return c
