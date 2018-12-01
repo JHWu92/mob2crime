@@ -1,8 +1,37 @@
+import os
+
 import geopandas as gp
 import pandas as pd
 from shapely.geometry import Point
 
 from src.creds import mex_root, mex_tower_fn
+from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids
+
+# source: https://epsg.io/102010
+EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
+AREA_CRS = 6362
+REGION_KINDS = ('cities')
+
+
+def tower2grids(kind='cities'):
+    if kind not in ('cities',):
+        raise ValueError(f'Regions kind={kind} is not implemented')
+    rgns = globals()[kind]()
+
+
+def tower_vor(rkind=None):
+    t = tower()
+    # voronoi polygons across mexico
+    tvor = lonlats2vor_gp(t.lonlat.tolist(), dataframe=True)
+    tvor['gtid'] = t.gtid
+    tvor.crs = t.crs
+    tvor.set_index('gtid', inplace=True)
+    if rkind is None:
+        return tvor
+    else:
+        rgns = regions(rkind)
+        return polys2polys(tvor, rgns, tvor.index.name, rgns.index.name, cur_crs=4326, area_crs=AREA_CRS,
+                           intersection_only=True)
 
 
 def tower():
@@ -28,7 +57,43 @@ def tower():
     return towers_shp
 
 
+def regions(rkind='cities'):
+    if rkind not in REGION_KINDS:
+        raise ValueError(f'Regions kind={rkind} is not implemented, it should be one of {REGION_KINDS}')
+    rgns = globals()[rkind]()
+    return rgns
+
+
 def cities():
     c = gp.read_file('data/cities_mexico.geojson')
     c.set_index('cname', inplace=True)
+    c.index.name = 'city'
     return c
+
+
+def grids(rkind, side, redo=False):
+    """
+    build grids and save it using gzip, gp.to_json;
+    read grids if it exists unless redo=True
+
+    :param rkind: which kind of regions is used, now only cities
+    :param side: the side of grid in meter
+    :param redo: if True, build grids regardless the existing file
+    :return:
+    """
+    import gzip
+    rgns = regions(rkind)
+    rname = rgns.index.name
+    grid_path = f'data/mex_grid_{rname}_{side}m.geojson.gz'
+
+    if not redo and os.path.exists(grid_path):
+        print('reading existing grids')
+        return gp.read_file(f'gzip://{grid_path}')
+
+    print('building grids')
+    g = gp_polys_to_grids(rgns, side, cur_crs=4326, eqdc_crs=EQDC_CRS, pname=rname)
+    g['grid'] = g.index
+    print('writing grids as gzip')
+    with gzip.open(grid_path, 'wt') as fout:
+        fout.write(g.to_json())
+    return g
