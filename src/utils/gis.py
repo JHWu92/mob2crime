@@ -1,13 +1,27 @@
 import geopandas as gp
 import numpy as np
 from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, box
+from shapely.geometry import Polygon, box, LineString
+import fiona
+
 
 def crs_normalization(crs):
-    """if crs is int, meaning it's epsg code, turn it into a dict"""
+    """if crs is int, meaning it's epsg code, turn it into a dict
+    if crs is string, it is a proj4 string, parse it into a dict
+    """
     if isinstance(crs, int):
-        crs = {'init': f'epsg:{crs}'}
+        crs = fiona.crs.from_epsg(crs)
+    if isinstance(crs, str):
+        crs = fiona.crs.from_string(crs)
     return crs
+
+
+def assign_crs(gpdf, cur_crs):
+    """if gpdf has crs, use its own; else use cur_crs"""
+    if gpdf.crs is None:
+        if cur_crs is None:
+            raise ValueError('No current CRS is found')
+        gpdf.crs = cur_crs
 
 
 def haversine(lon1, lat1, lon2, lat2):
@@ -93,7 +107,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
     return new_regions, np.asarray(new_vertices)
 
 
-def vor2gp(vor, radius=None, dataframe=False, lonlat_bounded=True):
+def vor_gp(vor, radius=None, dataframe=False, lonlat_bounded=True):
     regions, vertices = voronoi_finite_polygons_2d(vor, radius=radius)
     polys = []
     for r in regions:
@@ -106,9 +120,9 @@ def vor2gp(vor, radius=None, dataframe=False, lonlat_bounded=True):
     return gp.GeoSeries(polys)
 
 
-def lonlats2vorpolys(lonlats, radius=None, dataframe=False, lonlat_bounded=True):
+def lonlats2vor_gp(lonlats, radius=None, dataframe=False, lonlat_bounded=True):
     vor = Voronoi(lonlats)
-    return vor2gp(vor, radius, dataframe, lonlat_bounded)
+    return vor_gp(vor, radius, dataframe, lonlat_bounded)
 
 
 def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, area_crs=None, intersection_only=True):
@@ -184,4 +198,94 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     polys1_area.reset_index(inplace=True)
     itxns = itxns.merge(polys1_area)
     itxns['weight'] = itxns['iarea'] / itxns[pname1 + '_area']
-    return gp.pd.DataFrame(itxns[[pname1, pname2, 'weight']])
+    return itxns
+
+
+def poly_bbox(poly):
+    """
+
+    :param poly: poly can be a 4-element tuple representing the
+                 bounding box: lon_min, lat_min, lon_max, lat_max,
+                 or a closed LineString representing the outer ring
+    :return: Polygon, lon_min, lat_min, lon_max, lat_max
+    """
+    if isinstance(poly, tuple):
+        if len(poly) == 4:
+            lon_min, lat_min, lon_max, lat_max = poly
+            poly = box(poly)
+        else:
+            raise ValueError('poly is a tuple, but its len != 4')
+    elif isinstance(poly, LineString):
+        if poly.is_closed:
+            lon_min, lat_min, lon_max, lat_max = poly.bounds
+            poly = Polygon(poly)
+        else:
+            raise ValueError('poly is LineString but not closed, which is not supported here')
+    else:
+        lon_min, lat_min, lon_max, lat_max = poly.bounds
+    # else:
+    #     raise ValueError('poly is not bbox tuple, closed LineString or Polygon')
+    return poly, lon_min, lat_min, lon_max, lat_max
+
+
+def poly2grids(poly, side, within_poly=True):
+    """compute grids by the bounding box of the given polygon
+    :param poly: can be a 4-element tuple representing
+                 the bounding box: lon_min, lat_min, lon_max, lat_max,
+                 or a closed LineString representing the outer ring
+    :param side: the side of each grid
+    :param within_poly: if True, clip the grids by the polygon
+    :return: list of grids
+    """
+    # poly can be a 4-element tuple representing the bounding box: lon_min, lat_min, lon_max, lat_max
+    # or a closed LineString representing the outer ring
+
+    poly, lon_min, lat_min, lon_max, lat_max = poly_bbox(poly)
+
+    grids_lon, grids_lat = np.mgrid[lon_min:(lon_max + side):side, lat_min:(lat_max + side):side]
+    nlon, nlat = grids_lon.shape
+
+    grids = []
+    for i in range(nlon - 1):
+        for j in range(nlat - 1):
+            g = box(grids_lon[i, j], grids_lat[i, j], grids_lon[i + 1, j + 1], grids_lat[i + 1, j + 1])
+            if not g.intersects(poly):
+                continue
+            if within_poly and not g.within(poly):
+                g = g.intersection(poly)
+            grids.append(g)
+    return grids
+
+
+def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly'):
+    """
+
+    :param gp_polys: polygons in GeoDataFrame, with/without CRS
+    :param side: side of each grid
+    :param cur_crs: int, str or dict
+        if gpdf has crs, use its own; else use cur_crs
+    :param eqdc_crs: int, str or dict
+    :return:
+    """
+    """
+    if gpdf has crs, use its own; else use cur_crs
+    """
+    cur_crs = crs_normalization(cur_crs)
+    eqdc_crs = crs_normalization(eqdc_crs)
+
+    if eqdc_crs:  # crs transform is needed
+        assign_crs(gp_polys, cur_crs)
+        cur_crs = gp_polys.crs  # store the original crs
+        gp_polys = gp_polys.to_crs(eqdc_crs)
+
+    indices = []
+    grids = []
+    for i, row in gp_polys.iterrows():
+        gs = poly2grids(row.geometry, side)
+        grids.extend(gs)
+        indices.extend([i] * len(gs))
+    grids = gp.GeoDataFrame(list(zip(indices, grids)), columns=[pname, 'geometry'])
+    grids.crs = eqdc_crs
+    if eqdc_crs:
+        grids = grids.to_crs(cur_crs)
+    return grids
