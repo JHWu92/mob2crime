@@ -3,6 +3,13 @@ from copy import copy
 
 
 def loubar_thres(arr, is_sorted=False):
+    """
+    :param arr: arr to compute loubar
+    :param is_sorted: if the arr is not sorted, copy it and sorted it ascendingly first
+    :return:
+        loubar: the percentage of array above which is considered as hotspots
+        arr_thres: the threshold to pass to be considered as hotspots, i.e., arr[arr>arr_thres] are the hotspots
+    """
     if not is_sorted:
         arr = copy(arr)
         arr = sorted(arr)
