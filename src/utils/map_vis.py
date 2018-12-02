@@ -1,6 +1,8 @@
-﻿import folium
+﻿import datetime
+
+import folium
 import pandas as pd
-import datetime
+
 
 def geojson_per_row(gpdf, name, color='blue', tip_cols=None, some_map=None):
     feature_group = folium.FeatureGroup(name=name)
@@ -31,7 +33,17 @@ def point_per_row(gpdf, name, tip_cols=None, some_map=None):
     return feature_group
 
 
-def time_slider_choropleth(gpolys, values, dates=None, mini=None, maxi=None, dstr_format='%Y-%m-%d'):
+def time_slider_choropleth(gpolys, values, dates, mini=None, maxi=None, dstr_format='%Y-%m-%d', color_per_day=False):
+    """
+    :param gpolys: GeoDataFrame with the shape
+    :param values: {index_of_gpolys: [values per day]}
+    :param dates: list of dates (str) as the same format as dstr_format
+    :param mini: min value across all values, if None, min(values) is used
+    :param maxi: max value across all values, if None, max(values) is used
+    :param dstr_format: format of dates str
+    :param color_per_day: whether the color percentage/min/max is computed for each day. Default False
+    :return: a layer that can call add_to(folium_map)
+    """
     from folium.plugins import TimeSliderChoropleth
     from branca.colormap import linear
     cmap = linear.Reds_09.scale()
@@ -45,7 +57,10 @@ def time_slider_choropleth(gpolys, values, dates=None, mini=None, maxi=None, dst
     if mini is None:
         mini = values.min().min()
 
-    colors = values.applymap(lambda x: (x - mini) / (maxi - mini)).applymap(cmap)
+    if color_per_day:
+        colors = values.apply(lambda x: (x - x.min()) / (x.max() - x.min()), axis=1).applymap(cmap)
+    else:
+        colors = values.applymap(lambda x: (x - mini) / (maxi - mini)).applymap(cmap)
     colors.index = dates
 
     styledict = {}
