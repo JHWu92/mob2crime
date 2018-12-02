@@ -12,7 +12,7 @@ def loubar_thres(arr, is_sorted=False):
     """
     if not is_sorted:
         arr = copy(arr)
-        arr = sorted(arr)
+        arr = np.array(sorted(arr))
 
     lonrenz_y = arr.cumsum() / arr.sum()
     lonrenz_y = np.insert(lonrenz_y, 0, 0)
