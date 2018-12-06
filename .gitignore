@@ -108,7 +108,6 @@ src/creds.py
 data/*/
 data/tower*
 tmp/
-stats/AggMexTwUniqUserVOZ
-stats/MexTwHrUniqCntVOZ
+stats/*/
 jupyter-8889
 maps/
