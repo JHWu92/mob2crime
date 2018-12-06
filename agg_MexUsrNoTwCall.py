@@ -15,6 +15,7 @@ from src.creds import mex_root, mex_col_call
 
 debugging = False
 voz_only = True
+redo = True
 
 level = logging.DEBUG if debugging else logging.INFO
 logging.basicConfig(filename="logs/MexUsrNoTwCall.log", level=level,
@@ -41,7 +42,11 @@ if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 
 # In[19]:
-done_file_date = set([os.path.basename(fn).replace('.json.gz', '') for fn in glob.glob(stats_dir + '*.json.gz')])
+if not redo:
+    done_file_date = set([os.path.basename(fn).replace('.json.gz', '') for fn in glob.glob(stats_dir + '*.json.gz')])
+else:
+    done_file_date = set()
+    print("REDO is ON")
 
 # In[20]:
 # loop over the files
@@ -58,7 +63,7 @@ for cnt, fn in enumerate(fns):
         print('skipping %dth, file_date: %s' % (cnt, file_date))
         continue
 
-    print('working on the %dth file' % cnt)
+    print('working on the %dth file' % cnt, fn)
 
     logging.info('processing file: %s' % fn.replace(mex_root, ''))
 
@@ -82,11 +87,15 @@ for cnt, fn in enumerate(fns):
                 p1 = line[idx_p1]
                 t1 = line[idx_t1]
                 t2 = line[idx_t2]
+                no_t1 = t1 == '' or t1 is None
+                no_t2 = t2 == '' or t2 is None
                 stats[p1]['all'] += 1
-                if t1 == '' or t1 is None:
+                if no_t1:
                     stats[p1]['nt1'] += 1
-                if t2 == '' or t2 is None:
+                if no_t2:
                     stats[p1]['nt2'] += 1
+                if no_t1 and no_t2:
+                    stats[p1]['nt12'] += 1
             except Exception as e:
                 logging.exception('file %s line %d raise %s\nThis line is: %s' % (fn, i, type(e).__name__, line))
 
