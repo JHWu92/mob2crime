@@ -14,8 +14,8 @@ from src.creds import mex_root, mex_col_call
 
 
 debugging = False
-voz_only = True
-redo = True
+voz_only = False
+redo = False
 
 level = logging.DEBUG if debugging else logging.INFO
 logging.basicConfig(filename="logs/DQ_CDR_AGG_MexUsrNoTwCall.log", level=level,
