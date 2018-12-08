@@ -18,7 +18,7 @@ voz_only = True
 redo = True
 
 level = logging.DEBUG if debugging else logging.INFO
-logging.basicConfig(filename="logs/MexUsrNoTwCall.log", level=level,
+logging.basicConfig(filename="logs/DQ_CDR_AGG_MexUsrNoTwCall.log", level=level,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # In[5]:
@@ -37,7 +37,7 @@ for fn in glob.glob(mex_root + file_pattern):
 fns = sorted(fns)
 
 # In[8]:
-stats_dir = 'stats/AggMexUsrNoTwCallVOZ/' if voz_only else 'stats/AggMexUsrNoTwCallVOZENTRANTE/'
+stats_dir = 'stats/DQAggMexUsrNoTwCallVOZ/' if voz_only else 'stats/DQAggMexUsrNoTwCallVOZENTRANTE/'
 if debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 
