@@ -5,7 +5,7 @@ import pandas as pd
 from shapely.geometry import Point
 
 from src.creds import mex_root, mex_tower_fn
-from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids
+from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within
 
 CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
@@ -62,13 +62,30 @@ def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
     return t2g
 
 
-def tower_vor(rkind=None, intersection_only=False):
-    t = tower()
-    # voronoi polygons across mexico
-    tvor = lonlats2vor_gp(t.lonlat.tolist(), dataframe=True)
-    tvor['gtid'] = t.gtid
-    tvor.crs = t.crs
-    tvor.set_index('gtid', inplace=True)
+def tower_vor(rkind=None, intersection_only=False, in_country=True):
+    in_or_not = 'in_country' if in_country else 'raw_vor'
+    path = f'data/mex_tvor_{in_or_not}.geojson'
+
+    if os.path.exists(path):
+        tvor = gp.read_file(path)
+        tvor.set_index('gtid', inplace=True)
+        print(f'loading existing tvor file: {path}')
+
+    else:
+        t = tower()
+        # voronoi polygons across mexico
+        tvor = lonlats2vor_gp(t.lonlat.tolist(), dataframe=True)
+        tvor['gtid'] = t.gtid
+
+        if in_country:
+            print('clipping tvor outside mexico country boarder')
+            country_poly = country().geometry.values[0]
+            tvor['geometry'] = tvor.geometry.apply(lambda x: clip_if_not_within(x, country_poly))
+
+        assign_crs(tvor, 4326)
+        tvor.to_file(path, driver='GeoJSON')
+        tvor.set_index('gtid', inplace=True)
+
     if rkind is None:
         return tvor
     else:
@@ -96,7 +113,7 @@ def tower():
     towers_shp['lonlat'] = towers_shp.lonlat.apply(lambda x: eval(x))
     towers_shp['geometry'] = towers_shp.lonlat.apply(lambda x: Point(x))
     towers_shp = gp.GeoDataFrame(towers_shp)
-    towers_shp.crs = {'init': 'epsg:4326'}
+    towers_shp.crs = assign_crs(towers_shp, 4326)
     return towers_shp
 
 
@@ -139,4 +156,19 @@ def cities():
     c = gp.read_file('data/cities_mexico.geojson')
     c.set_index('cname', inplace=True)
     c.index.name = 'city'
+    c.crs = None
+    assign_crs(c, 4326)
     return c
+
+
+def states():
+    return gp.read_file('data/mexico/mge2014v6_2/mge2015v6_2.shp')
+
+
+def country():
+    c = gp.read_file('data/mexico.geojson')
+    c.crs = None
+    assign_crs(c, 4326)
+    return c
+
+
