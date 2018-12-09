@@ -1,8 +1,8 @@
+import fiona
 import geopandas as gp
 import numpy as np
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon, box, LineString
-import fiona
 
 
 def crs_normalization(crs):
@@ -17,6 +17,7 @@ def crs_normalization(crs):
 
 
 def assign_crs(gpdf, cur_crs):
+    cur_crs = crs_normalization(cur_crs)
     """if gpdf has crs, use its own; else use cur_crs"""
     if gpdf.crs is None:
         if cur_crs is None:
@@ -41,6 +42,12 @@ def haversine(lon1, lat1, lon2, lat2):
     c = 2 * asin(sqrt(a))
     r = 6371  # Radius of earth in kilometers. Use 3956 for miles
     return c * r
+
+
+def clip_if_not_within(poly_to_clip, region_poly):
+    if poly_to_clip.within(region_poly):
+        return poly_to_clip
+    return poly_to_clip.intersection(region_poly)
 
 
 def voronoi_finite_polygons_2d(vor, radius=None):
@@ -167,10 +174,11 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
                 "Need to do area transform, but area is not specified. "
                 f"cur_crs is {cur_crs}, polys1.crs is {polys1.crs}, polys2.crs is {polys2.crs}"
             )
-        if polys1.crs is None: polys1.crs = cur_crs
-        if polys2.crs is None: polys2.crs = cur_crs
+        assign_crs(polys1, cur_crs)
+        assign_crs(polys2, cur_crs)
 
     # get intersections between polys1 and polys2
+    # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
     ps1tops2 = gp.sjoin(polys1, polys2)
     itxns = []
     for li, row in ps1tops2.iterrows():
