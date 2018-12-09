@@ -14,7 +14,15 @@ AREA_CRS = 6362
 REGION_KINDS = ('cities',)
 
 
-def tower2grid(rkind, side, redo=False):
+def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
+    """
+
+    :param rkind: region kind: cities only
+    :param side: side of grids in meters
+    :param redo: ignore existing t2g mapping
+    :param t2r_intxn_only: keep only the intersection of the regions to compute the distribution weight.
+    :return:
+    """
     t2g_path = f'data/mex_t2g_{rkind}_{side}m.csv'
 
     if not redo and os.path.exists(t2g_path):
@@ -29,7 +37,7 @@ def tower2grid(rkind, side, redo=False):
     rname = rs.index.name
 
     print('keep tower voronoi within', rkind)
-    t2r = polys2polys(tvor, rs, tname, rname, cur_crs=4326, area_crs=AREA_CRS, intersection_only=True)
+    t2r = polys2polys(tvor, rs, tname, rname, cur_crs=4326, area_crs=AREA_CRS, intersection_only=t2r_intxn_only)
 
     gs = grids(rkind, side)
 
@@ -54,7 +62,7 @@ def tower2grid(rkind, side, redo=False):
     return t2g
 
 
-def tower_vor(rkind=None):
+def tower_vor(rkind=None, intersection_only=False):
     t = tower()
     # voronoi polygons across mexico
     tvor = lonlats2vor_gp(t.lonlat.tolist(), dataframe=True)
@@ -66,7 +74,7 @@ def tower_vor(rkind=None):
     else:
         rgns = regions(rkind)
         return polys2polys(tvor, rgns, tvor.index.name, rgns.index.name, cur_crs=4326, area_crs=AREA_CRS,
-                           intersection_only=True)
+                           intersection_only=intersection_only)
 
 
 def tower():
