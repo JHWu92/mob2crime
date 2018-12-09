@@ -16,10 +16,10 @@ def crs_normalization(crs):
     return crs
 
 
-def assign_crs(gpdf, cur_crs):
+def assign_crs(gpdf, cur_crs, ignore_gpdf_crs=False):
     cur_crs = crs_normalization(cur_crs)
     """if gpdf has crs, use its own; else use cur_crs"""
-    if gpdf.crs is None:
+    if gpdf.crs is None or ignore_gpdf_crs:
         if cur_crs is None:
             raise ValueError('No current CRS is found')
         gpdf.crs = cur_crs
