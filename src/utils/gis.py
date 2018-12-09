@@ -193,7 +193,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     else:
         polys1_area = polys1.to_crs(area_crs).geometry.apply(lambda x: x.area).to_frame()
         polys1_area.index.name = pname1
-    polys1_area = polys1_area
+    # polys1_area = polys1_area
     polys1_area.columns = [pname1 + '_area']
     polys1_area.reset_index(inplace=True)
     itxns = itxns.merge(polys1_area)
