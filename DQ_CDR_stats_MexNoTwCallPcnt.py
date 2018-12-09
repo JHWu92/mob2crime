@@ -25,7 +25,8 @@ def sum_count(d):
 
 sd = datetime.datetime.now()
 print('stated', sd)
-voz_or_en = 'VOZ'
+# voz_or_en = 'VOZ'
+voz_or_en = 'VOZENTRANTE'
 stats_dir = 'stats/DQAggMexUsrNoTwCall%s/' % voz_or_en
 
 fns = sorted(list(glob.glob(stats_dir + '*.json.gz')))
@@ -45,11 +46,11 @@ df['nt12pct'] = df.nt12 / df['all']
 nt1p = 100 * df.nt1.sum() / df['all'].sum()
 nt2p = 100 * df.nt2.sum() / df['all'].sum()
 nt12p = 100 * df.nt12.sum() / df['all'].sum()
-df.to_csv('stats/MexNoTwCallPcntDaily.csv')
+df.to_csv('stats/MexNoTwCallPcntDaily%s.csv' % voz_or_en)
 
 ax = df[['nt1pct', 'nt2pct', 'nt12pct']].plot.hist(
     alpha=0.5, title='overall no t1=%0.2f%% and no t2=%0.2f%% and no t1&2=%0.2f%%' % (nt1p, nt2p, nt12p))
 fig = ax.get_figure()
-fig.savefig('stats/MexNoTwCallPcntDailyHist.png')
+fig.savefig('stats/MexNoTwCallPcntDailyHist%s.png' % voz_or_en)
 
 print('ed', datetime.datetime.now(), datetime.datetime.now() - sd)
