@@ -69,6 +69,7 @@ def tower_vor(rkind=None, intersection_only=False, in_country=True):
     if os.path.exists(path):
         tvor = gp.read_file(path)
         tvor.set_index('gtid', inplace=True)
+        assign_crs(tvor, 4326, ignore_gpdf_crs=True)
         print(f'loading existing tvor file: {path}')
 
     else:
@@ -83,6 +84,7 @@ def tower_vor(rkind=None, intersection_only=False, in_country=True):
             tvor['geometry'] = tvor.geometry.apply(lambda x: clip_if_not_within(x, country_poly))
 
         assign_crs(tvor, 4326)
+        print(f'saving tvor file: {path}')
         tvor.to_file(path, driver='GeoJSON')
         tvor.set_index('gtid', inplace=True)
 
