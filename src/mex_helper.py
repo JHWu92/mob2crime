@@ -23,7 +23,7 @@ def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
     :param t2r_intxn_only: keep only the intersection of the regions to compute the distribution weight.
     :return:
     """
-    t2g_path = f'data/mex_t2g_{rkind}_{side}m.csv'
+    t2g_path = f'data/mex_tower/mex_t2g_{rkind}_{side}m.csv'
 
     if not redo and os.path.exists(t2g_path):
         print('reading existing t2g file:', t2g_path)
@@ -64,7 +64,7 @@ def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
 
 def tower_vor(rkind=None, intersection_only=False, in_country=True):
     in_or_not = 'in_country' if in_country else 'raw_vor'
-    path = f'data/mex_tvor_{in_or_not}.geojson'
+    path = f'data/mex_tower/mex_tvor_{in_or_not}.geojson'
 
     if os.path.exists(path):
         tvor = gp.read_file(path)
