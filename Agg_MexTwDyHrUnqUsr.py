@@ -35,13 +35,6 @@ parser.add_argument('--call-in-or-out', required=True, choices=['in', 'out'])
 args = parser.parse_args()
 print(args)
 
-# In[6]:
-
-
-level = logging.DEBUG if args.debugging else logging.INFO
-logging.basicConfig(filename="logs/AggMexTwDyHrUnqUsr.log", level=level,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 # In[7]:
 
 
@@ -71,6 +64,12 @@ stats_dir = f'stats/AggMexTwDyHrUnqUsr{call_in_out_str}/'
 if args.debugging: stats_dir += 'debug/'
 os.makedirs(stats_dir, exist_ok=True)
 print(f'stats_dir = {stats_dir}')
+
+# In[]:
+
+level = logging.DEBUG if args.debugging else logging.INFO
+logging.basicConfig(filename=f"logs/AggMexTwDyHrUnqUsr{call_in_out_str}.log", level=level,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # In[10]:
 
