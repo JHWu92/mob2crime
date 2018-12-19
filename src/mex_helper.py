@@ -3,7 +3,9 @@ import os
 import geopandas as gp
 import pandas as pd
 from shapely.geometry import Point
-
+import glob
+from collections import defaultdict
+import datetime
 from src.creds import mex_root, mex_tower_fn
 from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within
 
@@ -12,6 +14,33 @@ CLAT, CLON = 19.381495, -99.139095
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 AREA_CRS = 6362
 REGION_KINDS = ('cities',)
+
+
+def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
+    """return average hourly nunique users for each tower on each day of week (dow, weekday or weekend)"""
+    print('stats dir:', f'stats/MexTwHrUniqCnt-{call_direction}/')
+    fns = sorted(glob.glob(f'stats/MexTwHrUniqCnt-{call_direction}/*-located.csv'))
+    if len(fns) == 0:
+        print('no file is found')
+    print('loading stats by weekday or weekend')
+    store = {'wd': defaultdict(list), 'wk': defaultdict(list)}
+    for i, fn in enumerate(fns):
+        if i % 50 == 0:
+            print('loading %dth file %s' % (i, fn))
+        date = os.path.basename(fn)[:10]
+        date = datetime.datetime.strptime(date, '%Y-%m-%d')
+        dow = 'wd' if date.weekday() < 5 else 'wk'
+        tmp_df = pd.read_csv(fn, index_col=0)
+        for gtid, row in tmp_df.iterrows():
+            store[dow][gtid].append(row)
+
+    print('computing average of hourly vector by weekday or weekend')
+    average = {'wd': dict(), 'wk': dict()}
+    for dow in ['wd', 'wk']:
+        for gtid, rows in store[dow].items():
+            avg_row = pd.DataFrame(rows).fillna(0).mean(axis=0)
+            average[dow][gtid] = avg_row
+    return average
 
 
 def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
@@ -172,5 +201,3 @@ def country():
     c.crs = None
     assign_crs(c, 4326)
     return c
-
-
