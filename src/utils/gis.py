@@ -297,3 +297,21 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly')
     if eqdc_crs:
         grids = grids.to_crs(cur_crs)
     return grids
+
+
+def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None):
+    from scipy.spatial.distance import cdist
+
+    if len(polys) > 40000:
+        raise ValueError('size of polys is', len(polys), 'could be too large for memory')
+
+    cur_crs = crs_normalization(cur_crs)
+    dist_crs = crs_normalization(dist_crs)
+
+    centroids = polys.geometry.apply(lambda x: x.centroid)
+
+    assign_crs(centroids, cur_crs)
+
+    centroids = centroids.to_crs(dist_crs).apply(lambda x: x.coords[0]).tolist()
+    d = cdist(centroids, centroids)
+    return d
