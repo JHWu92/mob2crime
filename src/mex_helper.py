@@ -8,7 +8,7 @@ from collections import defaultdict
 import datetime
 from src.creds import mex_root, mex_tower_fn
 from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within
-
+import pickle
 CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
@@ -18,6 +18,13 @@ REGION_KINDS = ('cities',)
 
 def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
     """return average hourly nunique users for each tower on each day of week (dow, weekday or weekend)"""
+    path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}.pickle'
+
+    if os.path.exists(path):
+        print('loading cached tw average', path)
+        average = pickle.load(open(path, 'rb'))
+        return average
+
     print('stats dir:', f'stats/MexTwHrUniqCnt-{call_direction}/')
     fns = sorted(glob.glob(f'stats/MexTwHrUniqCnt-{call_direction}/*-located.csv'))
     if len(fns) == 0:
@@ -40,6 +47,8 @@ def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
         for gtid, rows in store[dow].items():
             avg_row = pd.DataFrame(rows).fillna(0).mean(axis=0)
             average[dow][gtid] = avg_row
+    pickle.dump(average, open(path, 'wb'))
+
     return average
 
 
