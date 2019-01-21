@@ -9,11 +9,12 @@ import datetime
 from src.creds import mex_root, mex_tower_fn
 from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within
 import pickle
+
 CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 AREA_CRS = 6362
-REGION_KINDS = ('cities',)
+REGION_KINDS = ('cities','urban_areas_16')
 
 
 def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
@@ -74,7 +75,7 @@ def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
     rs = regions(rkind)
     rname = rs.index.name
 
-    print('keep tower voronoi within', rkind)
+    print('keep tower voronoi within', rkind, 'intersection only:', t2r_intxn_only)
     t2r = polys2polys(tvor, rs, tname, rname, cur_crs=4326, area_crs=AREA_CRS, intersection_only=t2r_intxn_only)
 
     gs = grids(rkind, side)
@@ -193,12 +194,24 @@ def regions(rkind='cities'):
 
 
 def cities():
+    """
+    It is actually metropolitan areas.
+    """
     c = gp.read_file('data/cities_mexico.geojson')
     c.set_index('cname', inplace=True)
     c.index.name = 'city'
     c.crs = None
     assign_crs(c, 4326)
     return c
+
+
+def urban_areas_16():
+    u = gp.read_file('data/mex_16_munic_urban_merge.geojson')
+    u.set_index('name', inplace=True)
+    u.index.name = 'urban'
+    u.crs = None
+    assign_crs(u, 4326)
+    return u
 
 
 def states():
