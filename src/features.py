@@ -6,11 +6,12 @@ import src.utils.gis as gis
 
 
 # TODO
-#  all the functions are for mex and grid=1000
+#  all the functions are for mex
+#  and grid=1000 --> added gside
 
 
-def urban_dilatation_index(avg, rkind, rname):
-    mex_grids = mex.grids(rkind, 1000)
+def urban_dilatation_index(avg, rkind, rname, gside):
+    mex_grids = mex.grids(rkind, gside)
     mex_cities = mex.cities()
     areas = mex_cities.to_crs(gis.crs_normalization(mex.AREA_CRS)).geometry.apply(lambda x: x.area)
 
@@ -37,20 +38,25 @@ def urban_dilatation_index(avg, rkind, rname):
     return dv_r
 
 
-def hotspot_stats(avg, rkind, rname):
+def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
     from collections import defaultdict
     from src.utils import loubar_thres
 
-    mex_grids = mex.grids(rkind, 1000)
+    mex_grids = mex.grids(rkind, gside)
     mex_region = mex.regions(rkind)
     areas = mex_region.to_crs(gis.crs_normalization(mex.AREA_CRS)).geometry.apply(lambda x: x.area)
 
     def keep_hotspot(avg):
         for h in avg:
             arr = avg[h]
-            loubar, arr_thres = loubar_thres(arr, is_sorted=False)
+            if hotspot_type=='loubar':
+                _, arr_thres = loubar_thres(arr, is_sorted=False)
+            elif hotspot_type=='average':
+                arr_thres = np.mean(arr)
+            else:
+                raise ValueError('hotspot type', hotspot_type,'not implemented')
             avg[h][avg[h] <= arr_thres] = 0
-        #         print(h, loubar, arr_thres)
+            # print(h, loubar, arr_thres)
         return avg
 
     n_hotspot_regions = {}
@@ -73,8 +79,13 @@ def hotspot_stats(avg, rkind, rname):
         hotspot_stats_regions['n_med'][region] = len(intermediate)
         hotspot_stats_regions['n_int'][region] = len(intermittent)
 
-        avg_dist = lambda x: gis.polys_centroid_pairwise_dist(rgrids.loc[x.index], dist_crs=mex.EQDC_CRS).sum() / len(
-            x) / (len(x) - 1)
+        def avg_dist(x):
+            if len(x) <= 1:
+                return 0
+            l = len(x)
+            pair_dist = gis.polys_centroid_pairwise_dist(rgrids.loc[x.index], dist_crs=mex.EQDC_CRS).sum()
+            return pair_dist / l / (l - 1)
+
         d_per = avg_dist(permenant)
         d_med = avg_dist(intermediate)
         d_int = avg_dist(intermittent)
