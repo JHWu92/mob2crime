@@ -289,6 +289,7 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly')
     indices = []
     grids = []
     for i, row in gp_polys.iterrows():
+        print('gp_polys_to_grids',i)
         gs = poly2grids(row.geometry, side)
         grids.extend(gs)
         indices.extend([i] * len(gs))
