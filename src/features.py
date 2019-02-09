@@ -1,13 +1,52 @@
 import numpy as np
 import pandas as pd
-
+import os
 import src.mex_helper as mex
 import src.utils.gis as gis
+import datetime
 
 
 # TODO
 #  all the functions are for mex
 #  and grid=1000 --> added gside
+
+def fast_dv(rgrids, s, sqrt_area):
+    grid_dist = gis.polys_centroid_pairwise_dist(rgrids, dist_crs=mex.EQDC_CRS)
+    dv = {}
+    for t in s.columns:
+        st_outer = np.outer(s[t], s[t])
+        np.fill_diagonal(st_outer, 0)
+        dv[int(t)] = (st_outer * grid_dist).sum() / st_outer.sum() / sqrt_area
+    return dv
+
+
+def slow_dv(rgrids, s, sqrt_area, rkind, gside, region):
+    path = f'stats/urban_dilatation_index/{rkind}-{gside}-{region}.txt'
+    if os.path.exists(path):
+        dv = eval(open(path).read())
+        return dv
+
+    n_grids = len(rgrids)
+    dv = {}
+    grid_cens = np.array(rgrids.to_crs(mex.EQDC_CRS).geometry.apply(lambda x: x.centroid.coords[0]).tolist())
+    for t in s.columns:
+        st = s[t].tolist()
+        st_sum = 0
+        st_grid_dist = 0
+        for i in range(n_grids):
+            sti = st[i]
+            gi = grid_cens[i]
+            for j in range(i + 1, n_grids):
+                gj = grid_cens[j]
+                st_ij = sti * st[j]
+                st_sum += st_ij
+                dist = np.linalg.norm(gi - gj)
+                st_grid_dist += st_ij * dist
+        dv[t] = st_grid_dist / st_sum / sqrt_area
+    with open(path, 'w') as fout:
+        fout.write(str(dv))
+
+    return dv
 
 
 def urban_dilatation_index(avg, rkind, rname, gside):
@@ -17,19 +56,19 @@ def urban_dilatation_index(avg, rkind, rname, gside):
 
     dv_r = {}
     for region, rgrids in mex_grids.groupby(rname):
+        n_grids = len(rgrids)
         sqrt_area = np.sqrt(areas[region])
-        grid_dist = gis.polys_centroid_pairwise_dist(rgrids, dist_crs=mex.EQDC_CRS)
-        n_grids = len(grid_dist)
         cgrids_avg = avg.loc[rgrids.grid]
         s = cgrids_avg / cgrids_avg.sum()
         s.index = range(n_grids)
 
-        dv = {}
-        for t in s.columns:
-            st_outer = np.outer(s[t], s[t])
-            np.fill_diagonal(st_outer, 0)
-            dv[int(t)] = (st_outer * grid_dist).sum() / st_outer.sum() / sqrt_area
-
+        if n_grids < 40000:
+            dv = fast_dv(rgrids, s, sqrt_area)
+        else:
+            print(f'Region {region} has #grids: {n_grids}, using slow_dv function')
+            before = datetime.datetime.now()
+            dv = slow_dv(rgrids, s, sqrt_area, rkind, gside, region)
+            print('it took {} seconds'.format((datetime.datetime.now() - before)).total_seconds())
         dv_r[region] = dv
 
     dv_r = pd.DataFrame(dv_r).T
@@ -49,12 +88,12 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
     def keep_hotspot(avg):
         for h in avg:
             arr = avg[h]
-            if hotspot_type=='loubar':
+            if hotspot_type == 'loubar':
                 _, arr_thres = loubar_thres(arr, is_sorted=False)
-            elif hotspot_type=='average':
+            elif hotspot_type == 'average':
                 arr_thres = np.mean(arr)
             else:
-                raise ValueError('hotspot type', hotspot_type,'not implemented')
+                raise ValueError('hotspot type', hotspot_type, 'not implemented')
             avg[h][avg[h] <= arr_thres] = 0
             # print(h, loubar, arr_thres)
         return avg

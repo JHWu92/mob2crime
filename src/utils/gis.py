@@ -254,6 +254,8 @@ def poly2grids(poly, side, within_poly=True):
     nlon, nlat = grids_lon.shape
 
     grids = []
+    row_lon_ids = []
+    col_lat_ids = []
     for i in range(nlon - 1):
         for j in range(nlat - 1):
             g = box(grids_lon[i, j], grids_lat[i, j], grids_lon[i + 1, j + 1], grids_lat[i + 1, j + 1])
@@ -262,7 +264,9 @@ def poly2grids(poly, side, within_poly=True):
             if within_poly and not g.within(poly):
                 g = g.intersection(poly)
             grids.append(g)
-    return grids
+            row_lon_ids.append(i)
+            col_lat_ids.append(j)
+    return grids, row_lon_ids, col_lat_ids
 
 
 def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly'):
@@ -288,12 +292,17 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly')
 
     indices = []
     grids = []
+    row_ids = []
+    col_ids = []
     for i, row in gp_polys.iterrows():
-        print('gp_polys_to_grids',i)
-        gs = poly2grids(row.geometry, side)
+        print('gp_polys_to_grids', i)
+        gs, rids, cids = poly2grids(row.geometry, side)
         grids.extend(gs)
         indices.extend([i] * len(gs))
-    grids = gp.GeoDataFrame(list(zip(indices, grids)), columns=[pname, 'geometry'])
+        row_ids.extend(rids)
+        col_ids.extend(cids)
+    grids = gp.GeoDataFrame(list(zip(indices, grids, row_ids, col_ids)),
+                            columns=[pname, 'geometry', 'row_id', 'col_id'])
     grids.crs = eqdc_crs
     if eqdc_crs:
         grids = grids.to_crs(cur_crs)
