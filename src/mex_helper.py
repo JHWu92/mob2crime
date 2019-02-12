@@ -14,7 +14,7 @@ CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 AREA_CRS = 6362
-REGION_KINDS = ('cities', 'urban_areas_16', 'metropolitans_16')
+REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans_16')
 
 
 def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
@@ -207,6 +207,15 @@ def cities():
 
 def urban_areas_16():
     u = gp.read_file('data/mex_16_munic_urban_merge.geojson')
+    u.set_index('name', inplace=True)
+    u.index.name = 'urban'
+    u.crs = None
+    assign_crs(u, 4326)
+    return u
+
+
+def urban_areas_cvh_16():
+    u = gp.read_file('data/mex_16_munic_urban_merge_cvh.geojson')
     u.set_index('name', inplace=True)
     u.index.name = 'urban'
     u.crs = None
