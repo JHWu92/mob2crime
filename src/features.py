@@ -33,6 +33,7 @@ def slow_dv(rgrids, s, sqrt_area, rkind, gside, region):
         st = s[t].tolist()
         st_sum = 0
         st_grid_dist = 0
+        print(f'slow_dv doing t={t}, at time:', datetime.datetime.now())
         for i in range(n_grids):
             sti = st[i]
             gi = grid_cens[i]
@@ -51,8 +52,8 @@ def slow_dv(rgrids, s, sqrt_area, rkind, gside, region):
 
 def urban_dilatation_index(avg, rkind, rname, gside):
     mex_grids = mex.grids(rkind, gside)
-    mex_cities = mex.cities()
-    areas = mex_cities.to_crs(gis.crs_normalization(mex.AREA_CRS)).geometry.apply(lambda x: x.area)
+    mex_regions = mex.regions(rkind)
+    areas = mex_regions.to_crs(gis.crs_normalization(mex.AREA_CRS)).geometry.apply(lambda x: x.area)
 
     dv_r = {}
     for region, rgrids in mex_grids.groupby(rname):
@@ -100,6 +101,7 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
 
     n_hotspot_regions = {}
     hotspot_stats_regions = defaultdict(dict)
+    permanent_regions = {}
     for region, rgrids in mex_grids.groupby(rname):
         sqrt_area = np.sqrt(areas[region])
         # keep hotspot only, else set to 0
@@ -110,11 +112,12 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
 
         # stats based on persistence
         persistence = (chotspot != 0).sum(axis=1)
-        permenant = persistence[persistence == 24]
+        permanent = persistence[persistence == 24]
+        permanent_regions[region] = cgrids_avg.loc[permanent.index]
         intermediate = persistence[(persistence < 24) & (persistence >= 7)]
         intermittent = persistence[(persistence < 7) & (persistence >= 1)]
 
-        hotspot_stats_regions['n_per'][region] = len(permenant)
+        hotspot_stats_regions['n_per'][region] = len(permanent)
         hotspot_stats_regions['n_med'][region] = len(intermediate)
         hotspot_stats_regions['n_int'][region] = len(intermittent)
 
@@ -125,7 +128,7 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
             pair_dist = gis.polys_centroid_pairwise_dist(rgrids.loc[x.index], dist_crs=mex.EQDC_CRS).sum()
             return pair_dist / l / (l - 1)
 
-        d_per = avg_dist(permenant)
+        d_per = avg_dist(permanent)
         d_med = avg_dist(intermediate)
         d_int = avg_dist(intermittent)
 
@@ -136,4 +139,4 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
     n_hotspot_regions = pd.DataFrame(n_hotspot_regions).T
     n_hotspot_regions.columns = [f'nhot_{int(c):02}' for c in n_hotspot_regions.columns]
     hotspot_stats_regions = pd.DataFrame(hotspot_stats_regions)
-    return n_hotspot_regions, hotspot_stats_regions
+    return n_hotspot_regions, hotspot_stats_regions, permanent_regions
