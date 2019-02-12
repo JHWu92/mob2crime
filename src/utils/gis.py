@@ -236,17 +236,22 @@ def poly_bbox(poly):
     return poly, lon_min, lat_min, lon_max, lat_max
 
 
-def poly2grids(poly, side, within_poly=True):
+def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False):
     """compute grids by the bounding box of the given polygon
     :param poly: can be a 4-element tuple representing
                  the bounding box: lon_min, lat_min, lon_max, lat_max,
                  or a closed LineString representing the outer ring
     :param side: the side of each grid
-    :param within_poly: if True, clip the grids by the polygon
+    :param clip_by_poly: if True, clip the grids by the polygon
+    :param no_grid_by_area: bool, default False
+        if True, and the area of poly <= the grid (side**2), and poly is Polygon
+        return the whole polygon as a grid.
     :return: list of grids
     """
     # poly can be a 4-element tuple representing the bounding box: lon_min, lat_min, lon_max, lat_max
     # or a closed LineString representing the outer ring
+    if no_grid_by_area and isinstance(poly, Polygon) and poly.area <= side ** 2:
+        return [poly], [0], [0]
 
     poly, lon_min, lat_min, lon_max, lat_max = poly_bbox(poly)
 
@@ -261,7 +266,7 @@ def poly2grids(poly, side, within_poly=True):
             g = box(grids_lon[i, j], grids_lat[i, j], grids_lon[i + 1, j + 1], grids_lat[i + 1, j + 1])
             if not g.intersects(poly):
                 continue
-            if within_poly and not g.within(poly):
+            if clip_by_poly and not g.within(poly):
                 g = g.intersection(poly)
             grids.append(g)
             row_lon_ids.append(i)
@@ -269,7 +274,8 @@ def poly2grids(poly, side, within_poly=True):
     return grids, row_lon_ids, col_lat_ids
 
 
-def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly'):
+def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
+                      pname='poly', no_grid_by_area=False, verbose=0):
     """
 
     :param gp_polys: polygons in GeoDataFrame, with/without CRS
@@ -277,6 +283,9 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly')
     :param cur_crs: int, str or dict
         if gpdf has crs, use its own; else use cur_crs
     :param eqdc_crs: int, str or dict
+    :param no_grid_by_area: bool, default False
+        if True, and the area of poly <= the grid (side**2), and poly is Polygon
+        return the whole polygon as a grid.
     :return:
     """
     """
@@ -295,8 +304,8 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None, pname='poly')
     row_ids = []
     col_ids = []
     for i, row in gp_polys.iterrows():
-        print('gp_polys_to_grids', i)
-        gs, rids, cids = poly2grids(row.geometry, side)
+        if verbose: print('gp_polys_to_grids', i)
+        gs, rids, cids = poly2grids(row.geometry, side, no_grid_by_area=no_grid_by_area)
         grids.extend(gs)
         indices.extend([i] * len(gs))
         row_ids.extend(rids)
