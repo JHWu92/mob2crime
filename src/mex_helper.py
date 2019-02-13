@@ -154,7 +154,7 @@ def tower():
     towers_shp['lonlat'] = towers_shp.lonlat.apply(lambda x: eval(x))
     towers_shp['geometry'] = towers_shp.lonlat.apply(lambda x: Point(x))
     towers_shp = gp.GeoDataFrame(towers_shp)
-    towers_shp.crs = assign_crs(towers_shp, 4326)
+    assign_crs(towers_shp, 4326)
     return towers_shp
 
 
@@ -175,12 +175,15 @@ def grids(rkind, side, redo=False):
 
     if not redo and os.path.exists(grid_path):
         print('reading existing grids')
-        return gp.read_file(f'gzip://{grid_path}')
+        g = gp.read_file(f'gzip://{grid_path}')
+        assign_crs(g, 4326)
+        return g
 
     print('building grids')
     g = gp_polys_to_grids(rgns, side, cur_crs=4326, eqdc_crs=EQDC_CRS, pname=rname)
     g['grid'] = g.index
     print('writing grids as gzip')
+    assign_crs(g, 4326)
     with gzip.open(grid_path, 'wt') as fout:
         fout.write(g.to_json())
     return g
