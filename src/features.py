@@ -50,16 +50,32 @@ def slow_dv(rgrids, s, sqrt_area, rkind, gside, region):
     return dv
 
 
+def handle_missing_grid_ids(grid_in_avg, rgrids, region):
+    grid_id = set(rgrids.grid)
+
+    grid_not_in_avg = grid_id - grid_in_avg
+    if len(grid_not_in_avg) != 0:
+        print(':::WARNING:::', region, 'has some grids not intersecting tower vor', grid_not_in_avg)
+        grid_id = list(grid_id & grid_in_avg)
+        rgrids = rgrids[~rgrids.grid.isin(grid_not_in_avg)]
+
+    return rgrids
+
+
 def urban_dilatation_index(avg, rkind, rname, gside):
     mex_grids = mex.grids(rkind, gside)
     mex_regions = mex.regions(rkind)
     areas = mex_regions.to_crs(gis.crs_normalization(mex.AREA_CRS)).geometry.apply(lambda x: x.area)
 
+    grid_in_avg = set(avg.index)
     dv_r = {}
     for region, rgrids in mex_grids.groupby(rname):
-        n_grids = len(rgrids)
+        rgrids = handle_missing_grid_ids(grid_in_avg, rgrids, region)
+        grid_id = rgrids.grid
+        n_grids = len(grid_id)
+
         sqrt_area = np.sqrt(areas[region])
-        cgrids_avg = avg.loc[rgrids.grid]
+        cgrids_avg = avg.loc[grid_id]
         s = cgrids_avg / cgrids_avg.sum()
         s.index = range(n_grids)
 
@@ -102,16 +118,22 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
     n_hotspot_regions = {}
     hotspot_stats_regions = defaultdict(dict)
     permanent_regions = {}
+    persistence_regions = {}
+    grid_in_avg = set(avg.index)
     for region, rgrids in mex_grids.groupby(rname):
+        rgrids = handle_missing_grid_ids(grid_in_avg, rgrids, region)
+
         sqrt_area = np.sqrt(areas[region])
         # keep hotspot only, else set to 0
         cgrids_avg = avg.loc[rgrids.grid].copy()
         chotspot = keep_hotspot(cgrids_avg)
+        # print(chotspot)
         # stats of all hotspots
         n_hotspot_regions[region] = (chotspot != 0).sum()
 
         # stats based on persistence
         persistence = (chotspot != 0).sum(axis=1)
+        persistence_regions[region] = persistence
         permanent = persistence[persistence == 24]
         permanent_regions[region] = cgrids_avg.loc[permanent.index]
         intermediate = persistence[(persistence < 24) & (persistence >= 7)]
@@ -125,6 +147,9 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
             if len(x) <= 1:
                 return 0
             l = len(x)
+            if len(x)>40000:
+                print(':::WARNING:::, too many grids, aborted')
+                return np.nan
             pair_dist = gis.polys_centroid_pairwise_dist(rgrids.loc[x.index], dist_crs=mex.EQDC_CRS).sum()
             return pair_dist / l / (l - 1)
 
@@ -139,4 +164,4 @@ def hotspot_stats(avg, rkind, rname, gside, hotspot_type):
     n_hotspot_regions = pd.DataFrame(n_hotspot_regions).T
     n_hotspot_regions.columns = [f'nhot_{int(c):02}' for c in n_hotspot_regions.columns]
     hotspot_stats_regions = pd.DataFrame(hotspot_stats_regions)
-    return n_hotspot_regions, hotspot_stats_regions, permanent_regions
+    return n_hotspot_regions, hotspot_stats_regions, permanent_regions, persistence_regions
