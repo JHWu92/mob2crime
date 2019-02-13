@@ -237,7 +237,7 @@ def states():
 
 
 def country():
-    c = gp.read_file('data/mexico_country.geojson')
+    c = gp.read_file('data/mex_country.geojson')
     c.crs = None
     assign_crs(c, 4326)
     return c
