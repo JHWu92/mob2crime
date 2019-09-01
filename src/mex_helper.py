@@ -7,14 +7,16 @@ import glob
 from collections import defaultdict
 import datetime
 from src.creds import mex_root, mex_tower_fn
-from src.utils.gis import lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within
+from src.utils.gis import (lonlats2vor_gp, polys2polys, gp_polys_to_grids, assign_crs, clip_if_not_within,
+                           crs_normalization)
 import pickle
 
 CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 AREA_CRS = 6362
-REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans_16')
+REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans_16',
+                'metropolitans_all', 'mpa_all_uba')
 
 
 def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
@@ -51,6 +53,20 @@ def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
     pickle.dump(average, open(path, 'wb'))
 
     return average
+
+
+def loc2grid_by_area(rkind, grid_side, loc_buffer=500):
+    path = f'data/mex_tower/Loc2GridByArea-{rkind}-GS{grid_side}-LBf{loc_buffer}.csv'
+    if not os.path.exists(path):
+        raise FileNotFoundError('please run the scripts in mex_prep/ first')
+    return pd.read_csv(path, index_col=0)
+
+
+def tower2loc_by_pop():
+    path = 'data/mex_tower/TVorByLocPop.csv'
+    if not os.path.exists(path):
+        raise FileNotFoundError('please run the scripts in mex_prep/ first')
+    return pd.read_csv(path, index_col=0)
 
 
 def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
@@ -226,6 +242,24 @@ def urban_areas_cvh_16():
     return u
 
 
+def mpa_all_uba():
+    u = gp.read_file('data/mex_ALL_mpa_uba.geojson')
+    u.set_index('name', inplace=True)
+    u.index.name = 'urban'
+    u.crs = None
+    assign_crs(u, 4326)
+    return u
+
+
+def metropolitans_all():
+    m = gp.read_file('data/mex_ALL_metropolitans.geojson')
+    m.set_index('name', inplace=True)
+    m.index.name = 'metropolitan'
+    m.crs = None
+    assign_crs(m, 4326)
+    return m
+
+
 def metropolitans_16():
     m = gp.read_file('data/mex_16_metropolitans.geojson')
     m.set_index('name', inplace=True)
@@ -244,3 +278,32 @@ def country():
     c.crs = None
     assign_crs(c, 4326)
     return c
+
+
+def population_loc():
+    population = pd.read_csv('data/mexico/Localidades-population.csv')
+    population['loc_id'] = population['Clave de localidad'].apply(lambda x: f'{x:09}')
+    population['CVE_ENT'] = population['Clave entidad'].apply(lambda x: f'{x:02}')
+    return population
+
+
+def localidad(buffer=500, to_crs=4326):
+    lur = gp.read_file(
+        'data/mexico/inegi2018/Marco_Geoestadistico_Integrado_diciembre_2018/conjunto de datos/01_32_l.shp')
+    lur['loc_id'] = lur.CVE_ENT + lur.CVE_MUN + lur.CVE_LOC
+    lur = lur.drop(['CVEGEO', 'CVE_LOC'], axis=1)
+
+    lpr = gp.read_file(
+        'data/mexico/inegi2018/Marco_Geoestadistico_Integrado_diciembre_2018/conjunto de datos/01_32_lpr.shp')
+    lpr['loc_id'] = lpr.CVE_ENT + lpr.CVE_MUN + lpr.CVE_LOC
+    # remove points that already have polygons
+    lpr = lpr[~lpr.loc_id.isin(lur.loc_id)]
+    lpr['AMBITO'] = 'Rural-P'  # they all are rural points
+    # buffer the point
+    lprbf = lpr.copy()
+    if buffer:
+        lprbf.geometry = lprbf.buffer(buffer)
+    l = pd.concat([lur, lprbf[lur.columns]], ignore_index=True).set_index('loc_id')
+    if to_crs:
+        l = l.to_crs(crs_normalization(to_crs))
+    return l
