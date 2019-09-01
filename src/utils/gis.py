@@ -182,7 +182,11 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     ps1tops2 = gp.sjoin(polys1, polys2)
     itxns = []
     for li, row in ps1tops2.iterrows():
-        itxn = polys2.loc[row.index_right].geometry.intersection(polys1.loc[li].geometry)
+        p2 = polys2.loc[row.index_right].geometry
+        p1 = polys1.loc[li].geometry
+        # .intersection itself seems to has a if contains condition
+        itxn = p2.intersection(p1)
+
         itxns.append({pname1: li, pname2: row.index_right, 'geometry': itxn})
     itxns = gp.GeoDataFrame(itxns)
 
@@ -198,13 +202,21 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     # compute the weight
     if intersection_only:
         polys1_area = itxns.groupby(pname1).apply(lambda x: x['iarea'].sum()).to_frame()
+        polys2_area = itxns.groupby(pname2).apply(lambda x: x['iarea'].sum()).to_frame()
     else:
         polys1_area = polys1.to_crs(area_crs).geometry.apply(lambda x: x.area).to_frame()
         polys1_area.index.name = pname1
-    # polys1_area = polys1_area
+        polys2_area = polys2.to_crs(area_crs).geometry.apply(lambda x: x.area).to_frame()
+        polys2_area.index.name = pname2
+
     polys1_area.columns = [pname1 + '_area']
     polys1_area.reset_index(inplace=True)
+    polys2_area.columns = [pname2 + '_area']
+    polys2_area.reset_index(inplace=True)
+
     itxns = itxns.merge(polys1_area)
+    itxns = itxns.merge(polys2_area)
+
     itxns['weight'] = itxns['iarea'] / itxns[pname1 + '_area']
     return itxns
 
