@@ -7,11 +7,26 @@ import pandas as pd
 def geojson_per_row(gpdf, name, color='blue', tip_cols=None, some_map=None):
     feature_group = folium.FeatureGroup(name=name)
     for row in gpdf.itertuples():
-
-        if row.geometry.boundary.type == 'MultiLineString':
-            lines = row.geometry.boundary
+        geom = row.geometry
+        # get boundaries from geom
+        if geom.type == 'Polygon':
+            if geom.boundary.type == 'MultiLineString':
+                lines = geom.boundary
+            else:
+                lines = [geom.boundary]
         else:
-            lines = [row.geometry.boundary]
+            lines = []
+            for part in geom:
+                if part.type == 'Point':
+                    continue
+                elif part.type == 'LineString':
+                    lines.append(part)
+                else:
+                    lines.append(part.boundary)
+        # if row.geometry.boundary.type == 'MultiLineString':
+        #     lines = row.geometry.boundary
+        # else:
+        #     lines = [row.geometry.boundary]
 
         for line in lines:
             tip = '<br>'.join(
