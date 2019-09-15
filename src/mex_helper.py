@@ -59,14 +59,19 @@ def loc2grid_by_area(rkind, grid_side, loc_buffer=500):
     path = f'data/mex_tower/Loc2GridByArea-{rkind}-GS{grid_side}-LBf{loc_buffer}.csv'
     if not os.path.exists(path):
         raise FileNotFoundError('please run the scripts in mex_prep/ first')
-    return pd.read_csv(path, index_col=0)
+    loc2grid = pd.read_csv(path, index_col=0)
+    loc2grid['localidad'] = loc2grid['localidad'].apply(lambda x: f'{x:09}')
+    return loc2grid
 
 
 def tower2loc_by_pop():
     path = 'data/mex_tower/TVorByLocPop.csv'
     if not os.path.exists(path):
         raise FileNotFoundError('please run the scripts in mex_prep/ first')
-    return pd.read_csv(path, index_col=0)
+    t2loc = pd.read_csv(path, index_col=0)
+    t2loc['localidad'] = t2loc['localidad'].apply(lambda x: f'{x:09}')
+
+    return t2loc
 
 
 def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
@@ -288,22 +293,35 @@ def population_loc():
 
 
 def localidad(buffer=500, to_crs=4326):
+    population = population_loc()
+
+    print('reading Localidad with polygons')
     lur = gp.read_file(
         'data/mexico/inegi2018/Marco_Geoestadistico_Integrado_diciembre_2018/conjunto de datos/01_32_l.shp')
     lur['loc_id'] = lur.CVE_ENT + lur.CVE_MUN + lur.CVE_LOC
     lur = lur.drop(['CVEGEO', 'CVE_LOC'], axis=1)
+    # add population information
+    lur = lur.merge(population[['loc_id', 'Población total']], how='left')
+    lur = lur.rename(columns={'Población total': 'Pop'})
 
+    print('reading Localidad with points')
     lpr = gp.read_file(
         'data/mexico/inegi2018/Marco_Geoestadistico_Integrado_diciembre_2018/conjunto de datos/01_32_lpr.shp')
     lpr['loc_id'] = lpr.CVE_ENT + lpr.CVE_MUN + lpr.CVE_LOC
+    # add population information
+    lpr = lpr.merge(population[['loc_id', 'Población total']], how='left')
+    lpr = lpr.rename(columns={'Población total': 'Pop'})
     # remove points that already have polygons
     lpr = lpr[~lpr.loc_id.isin(lur.loc_id)]
     lpr['AMBITO'] = 'Rural-P'  # they all are rural points
+
     # buffer the point
     lprbf = lpr.copy()
     if buffer:
+        print('buffering point to', buffer)
         lprbf.geometry = lprbf.buffer(buffer)
     l = pd.concat([lur, lprbf[lur.columns]], ignore_index=True).set_index('loc_id')
     if to_crs:
+        print('changing crs to', to_crs)
         l = l.to_crs(crs_normalization(to_crs))
     return l
