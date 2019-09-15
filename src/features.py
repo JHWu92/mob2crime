@@ -55,7 +55,7 @@ def handle_missing_grid_ids(grid_in_avg, rgrids, region):
 
     grid_not_in_avg = grid_id - grid_in_avg
     if len(grid_not_in_avg) != 0:
-        print(':::WARNING:::', region, 'has some grids not intersecting tower vor', grid_not_in_avg)
+        print(':::WARNING:::', region, 'has some grids not intersecting tower vor', len(grid_not_in_avg))
         grid_id = list(grid_id & grid_in_avg)
         rgrids = rgrids[~rgrids.grid.isin(grid_not_in_avg)]
 
@@ -70,6 +70,7 @@ def urban_dilatation_index(avg, rkind, rname, gside):
     grid_in_avg = set(avg.index)
     dv_r = {}
     for region, rgrids in mex_grids.groupby(rname):
+        print('working on',region)
         rgrids = handle_missing_grid_ids(grid_in_avg, rgrids, region)
         grid_id = rgrids.grid
         n_grids = len(grid_id)
