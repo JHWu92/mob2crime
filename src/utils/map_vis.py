@@ -4,6 +4,42 @@ import folium
 import pandas as pd
 
 
+def geojson_per_row_color_col(gpdf, name, color='blue', tip_cols=None, some_map=None, color_col=None):
+    if color_col:
+        from branca.colormap import linear
+        cmap = linear.Reds_09.scale()
+        colors = gpdf[color_col].apply(cmap)
+    else:
+        colors = [color] * len(gpdf)
+    feature_group = folium.FeatureGroup(name=name)
+    for i, row in enumerate(gpdf.itertuples()):
+        geom = row.geometry
+        # get boundaries from geom
+        if geom.type == 'Polygon':
+            if geom.boundary.type == 'MultiLineString':
+                lines = geom.boundary
+            else:
+                lines = [geom.boundary]
+        else:
+            lines = []
+            for part in geom:
+                if part.type == 'Point':
+                    continue
+                elif part.type == 'LineString':
+                    lines.append(part)
+                else:
+                    lines.append(part.boundary)
+        clr = colors[i]
+        for line in lines:
+            tip = '<br>'.join(
+                ['%s: %s' % (col, getattr(row, col)) for col in tip_cols]) if tip_cols is not None else name
+
+            folium.Polygon(locations=[(lat, lon) for lon, lat in line.coords], color=clr, fill_color=clr,
+                           tooltip=tip, popup=tip).add_to(feature_group)
+    if some_map is not None:
+        feature_group.add_to(some_map)
+    return feature_group
+
 def geojson_per_row(gpdf, name, color='blue', tip_cols=None, some_map=None):
     feature_group = folium.FeatureGroup(name=name)
     for row in gpdf.itertuples():
