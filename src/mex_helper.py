@@ -64,13 +64,25 @@ def loc2grid_by_area(rkind, grid_side, loc_buffer=500):
     return loc2grid
 
 
-def tower2loc_by_pop():
-    path = 'data/mex_tower/TVorByLocPop.csv'
-    if not os.path.exists(path):
-        raise FileNotFoundError('please run the scripts in mex_prep/ first')
-    t2loc = pd.read_csv(path, index_col=0)
-    t2loc['localidad'] = t2loc['localidad'].apply(lambda x: f'{x:09}')
+# def tower2loc_by_pop():
+#     path = 'data/mex_tower/TVorByLocPop.csv'
+#     if not os.path.exists(path):
+#         raise FileNotFoundError('please run the scripts in mex_prep/ first')
+#     t2loc = pd.read_csv(path, index_col=0)
+#     t2loc['localidad'] = t2loc['localidad'].apply(lambda x: f'{x:09}')
+#
+#     return t2loc
 
+def tower2loc(loc_buffer):
+    t2loc_path = f'data/mex_tower/tower2loc-{loc_buffer}.geojson.gz'
+    if not os.path.exists(t2loc_path):
+        raise FileNotFoundError('please run the scripts in mex_prep/ first')
+    print('loading t2loc with geometry')
+    t2loc = gp.read_file(f'gzip://{t2loc_path}')
+    t2loc = t2loc.set_index('id')
+    t2loc.index = t2loc.index.astype(int)
+    t2loc.index.name = None
+    assign_crs(t2loc, 4326)
     return t2loc
 
 
@@ -123,6 +135,13 @@ def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
 
 
 def tower_vor(rkind=None, intersection_only=False, in_country=True):
+    """
+
+    :param rkind: region kind
+    :param intersection_only: works with rkind only
+    :param in_country: whether to cut vor by country boarder or not
+    :return: tower vor
+    """
     in_or_not = 'in_country' if in_country else 'raw_vor'
     path = f'data/mex_tower/mex_tvor_{in_or_not}.geojson'
 
