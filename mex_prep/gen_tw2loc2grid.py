@@ -146,18 +146,21 @@ def visualize_selected_grids(rkind, gs):
 
 
 Loc_Buffer = 500
+print('======getting T2LOC')
 T2LOC = tower2loc(Loc_Buffer)
-print('The average sum weight distributed out by all tower is:', T2LOC.groupby('tower').weight.sum().mean())
+print('======The average sum weight distributed out by all tower is:', T2LOC.groupby('tower').weight.sum().mean())
 T2LOC = T2LOC.rename(columns={'iPop': 'tl_pop', 'Pop': 'loc_pop', 'weight': 'w_t2l_bP'})
+print('======loading Tvor')
 Tvor = mex.tower_vor()
 
 for RKind in ['metropolitans_all']:
+    print(f'========rkind={RKind}, loading mexdf and localidad for creating example maps')
     REGION = mex.regions(RKind)
     MEXDF = REGION.iloc[0]
     LOCALIDAD = mex.localidad(Loc_Buffer, to_crs=4326)
 
     for Grid_side in [500, 100, 2000]:
-        print(f'rkind={RKind}, grid side = {Grid_side}', datetime.datetime.now())
+        print(f'==========rkind={RKind}, grid side = {Grid_side}', datetime.datetime.now())
         TL2G = tl2grid(T2LOC, RKind, Grid_side, Loc_Buffer)
 
         # create example maps for the process
