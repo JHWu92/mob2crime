@@ -179,6 +179,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
 
     # get intersections between polys1 and polys2
     # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
+    print('computing the intersection between p1 and p2')
     ps1tops2 = gp.sjoin(polys1, polys2)
     itxns = []
     for li, row in ps1tops2.iterrows():
@@ -191,6 +192,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     itxns = gp.GeoDataFrame(itxns)
 
     # get area of the intersections
+    print('computing area of the intersections')
     if do_crs_transform:
         itxns.crs = polys1.crs
         itxns_for_area = itxns.to_crs(area_crs)
@@ -200,6 +202,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     itxns.drop(itxns[itxns['iarea'] == 0].index, inplace=True)
 
     # compute the weight
+    print('computing the weight')
     if intersection_only:
         polys1_area = itxns.groupby(pname1).apply(lambda x: x['iarea'].sum()).to_frame()
         polys2_area = itxns.groupby(pname2).apply(lambda x: x['iarea'].sum()).to_frame()
