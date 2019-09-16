@@ -112,3 +112,5 @@ stats/*/
 jupyter-8889
 maps/
 maps*/
+data/mex_grid_*.geojson.gz
+data/mex_grid_*.geojson.gz.properties
