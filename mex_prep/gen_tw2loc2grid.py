@@ -77,9 +77,9 @@ def tl2grid(t2loc, rkind, grid_side, loc_buffer):
         return
 
     grids = mex.grids(RKind, Grid_side)
-    print('T2LOC.shape =', T2LOC.shape, 'Grids.shape =', grids.shape)
+    print('T2LOC.shape =', t2loc.shape, 'Grids.shape =', grids.shape)
     print('gis.p2p on t2loc and grids', datetime.datetime.now())
-    tl2g_raw = gis.polys2polys(T2LOC, grids, pname1='tl', pname2='grid',
+    tl2g_raw = gis.polys2polys(t2loc, grids, pname1='tl', pname2='grid',
                                cur_crs=4326, area_crs=mex.AREA_CRS, intersection_only=False)
 
     print('computing the final weight from tower to grid', datetime.datetime.now())
@@ -91,6 +91,12 @@ def tl2grid(t2loc, rkind, grid_side, loc_buffer):
                  'loc_pop', 'tower_area', 'grid_area', 'loclidad_area']]
     print('saving weights', datetime.datetime.now())
     tl2g.drop('geometry', axis=1).to_csv(path)
+
+    # create example maps for the process
+    Tvor['distributed_weight'] = tl2g.groupby('tower').weight.sum()
+    Tvor.distributed_weight.fillna(0, inplace=True)
+    visualize_selected_towers(RKind, Grid_side)
+    visualize_selected_grids(RKind, Grid_side,tl2g)
     return tl2g
 
 
@@ -113,15 +119,15 @@ def visualize_selected_towers(rkind, gs):
                                  some_map=some_map)
 
     folium.LayerControl().add_to(some_map)
-    some_map.save(f'mex_prep/gen_tw2loc2grid_selected_tower-{rkind}-GS{gs}.html')
+    some_map.save(f'data/mex_tower/tw2loc2grid_selected_tower-{rkind}-GS{gs}.html')
 
 
-def visualize_selected_grids(rkind, gs):
+def visualize_selected_grids(rkind, gs,tl2g):
     lon, lat = MEXDF.geometry.centroid.coords[0]
     # select by grid id
     some_map = folium.Map(location=[lat, lon], zoom_start=8)
     gids = [3935, 2533, 561]
-    target_tl2g = TL2G[TL2G.grid.isin(gids)]
+    target_tl2g = tl2g[tl2g.grid.isin(gids)]
 
     tids = target_tl2g.tower.unique()
     target_tvor = Tvor.loc[tids]
@@ -142,14 +148,14 @@ def visualize_selected_grids(rkind, gs):
                                  tip_cols=['tl', 'localidad', 'tower', 'grid', 'weight'], some_map=some_map)
 
     folium.LayerControl().add_to(some_map)
-    some_map.save(f'mex_prep/gen_tw2loc2grid_selected_grids-{rkind}-GS{gs}.html')
+    some_map.save(f'data/mex_tower/tw2loc2grid_selected_grids-{rkind}-GS{gs}.html')
 
 
 Loc_Buffer = 500
 print('======getting T2LOC')
 T2LOC = tower2loc(Loc_Buffer)
 print('======The average sum weight distributed out by all tower is:', T2LOC.groupby('tower').weight.sum().mean())
-T2LOC = T2LOC.rename(columns={'iPop': 'tl_pop', 'Pop': 'loc_pop', 'weight': 'w_t2l_bP'})
+T2LOC_rename = T2LOC.rename(columns={'iPop': 'tl_pop', 'Pop': 'loc_pop', 'weight': 'w_t2l_bP'})
 print('======loading Tvor')
 Tvor = mex.tower_vor()
 
@@ -159,12 +165,7 @@ for RKind in ['metropolitans_all']:
     MEXDF = REGION.iloc[0]
     LOCALIDAD = mex.localidad(Loc_Buffer, to_crs=4326)
 
-    for Grid_side in [500, 100, 2000]:
+    for Grid_side in [500, 1000, 2000]:
         print(f'==========rkind={RKind}, grid side = {Grid_side}', datetime.datetime.now())
-        TL2G = tl2grid(T2LOC, RKind, Grid_side, Loc_Buffer)
+        tl2grid(T2LOC_rename, RKind, Grid_side, Loc_Buffer)
 
-        # create example maps for the process
-        Tvor['distributed_weight'] = TL2G.groupby('tower').weight.sum()
-        Tvor.distributed_weight.fillna(0, inplace=True)
-        visualize_selected_towers(RKind, Grid_side)
-        visualize_selected_grids(RKind, Grid_side)
