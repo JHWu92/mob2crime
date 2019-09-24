@@ -15,7 +15,7 @@ def geojson_per_row_color_col(gpdf, name, color='blue', tip_cols=None, some_map=
     for i, row in enumerate(gpdf.itertuples()):
         geom = row.geometry
         # get boundaries from geom
-        if geom.type == 'Polygon':
+        if geom.type in ['Polygon', 'MultiPolygon']:
             if geom.boundary.type == 'MultiLineString':
                 lines = geom.boundary
             else:
@@ -45,7 +45,7 @@ def geojson_per_row(gpdf, name, color='blue', tip_cols=None, some_map=None):
     for row in gpdf.itertuples():
         geom = row.geometry
         # get boundaries from geom
-        if geom.type == 'Polygon':
+        if geom.type in ['Polygon', 'MultiPolygon']:
             if geom.boundary.type == 'MultiLineString':
                 lines = geom.boundary
             else:
