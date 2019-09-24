@@ -55,13 +55,13 @@ def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
     return average
 
 
-def loc2grid_by_area(rkind, grid_side, loc_buffer=500):
-    path = f'data/mex_tower/Loc2GridByArea-{rkind}-GS{grid_side}-LBf{loc_buffer}.csv'
-    if not os.path.exists(path):
-        raise FileNotFoundError('please run the scripts in mex_prep/ first')
-    loc2grid = pd.read_csv(path, index_col=0)
-    loc2grid['localidad'] = loc2grid['localidad'].apply(lambda x: f'{x:09}')
-    return loc2grid
+# def loc2grid_by_area(rkind, grid_side, loc_buffer=500):
+#     path = f'data/mex_tower/Loc2GridByArea-{rkind}-GS{grid_side}-LBf{loc_buffer}.csv'
+#     if not os.path.exists(path):
+#         raise FileNotFoundError('please run the scripts in mex_prep/ first')
+#     loc2grid = pd.read_csv(path, index_col=0)
+#     loc2grid['localidad'] = loc2grid['localidad'].apply(lambda x: f'{x:09}')
+#     return loc2grid
 
 
 # def tower2loc_by_pop():
@@ -84,6 +84,14 @@ def tower2loc(loc_buffer):
     t2loc.index.name = None
     assign_crs(t2loc, 4326)
     return t2loc
+
+
+def tower2loc2grid(t, rkind, grid_side):
+    t2l2g_path = f'data/mex_tower/Tw2Loc2GridByArea-{rkind}-GS{grid_side}-LBf{loc_buffer}.csv'
+    if not os.path.exists(t2l2g_path):
+        raise FileNotFoundError('please run the scripts in mex_prep/ first')
+    t2l2g = pd.read_csv(t2l2g_path, index_col=0)
+    return t2l2g
 
 
 def tower2grid(rkind, side, redo=False, t2r_intxn_only=False):
