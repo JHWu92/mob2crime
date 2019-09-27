@@ -14,6 +14,7 @@ import pickle
 CLAT, CLON = 19.381495, -99.139095
 # source: https://epsg.io/102010
 EQDC_CRS = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
+# source: https://gis.stackexchange.com/questions/234075/crs-for-calculating-areas-in-mexico
 AREA_CRS = 6362
 REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans_16',
                 'metropolitans_all', 'mpa_all_uba')
