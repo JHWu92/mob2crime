@@ -9,9 +9,9 @@ from shapely.ops import cascaded_union
 import src.mex as mex
 import src.mex.census2010 as census
 
-if not os.getcwd().endswith('mob2crime'):
-    os.chdir('..')
-sys.path.insert(0, os.getcwd())
+# if not os.getcwd().endswith('mob2crime'):
+#     os.chdir('..')
+sys.path.insert(0, '../../')
 
 DIR_CenGeo = 'data/mexico/geography-socioeconomics/2010CensusGeography'
 DIR_ZM = 'data/mexico/geography-socioeconomics/2010MetropolitanAreas'
