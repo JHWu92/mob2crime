@@ -9,9 +9,12 @@ from shapely.ops import cascaded_union
 import src.mex as mex
 import src.mex.census2010 as census
 
-sys.path.insert(0, '../../')
-folder = 'data/mexico/geography-socioeconomics/2010CensusGeography'
+if not os.getcwd().endswith('mob2crime'):
+    os.chdir('..')
+sys.path.insert(0, os.getcwd())
 
+DIR_CenGeo = 'data/mexico/geography-socioeconomics/2010CensusGeography'
+DIR_ZM = 'data/mexico/geography-socioeconomics/2010MetropolitanAreas'
 
 
 def filter_mun_ids(gpdf, mun_ids):
@@ -27,7 +30,7 @@ def filter_loc_ids(gpdf, loc_ids):
 
 
 def states(to_4326=False):
-    mge = gp.read_file(f'{folder}/national_macro/mge2010v5_0/estados.shp')
+    mge = gp.read_file(f'{DIR_CenGeo}/national_macro/mge2010v5_0/estados.shp')
     if to_4326:
         mge = mge.to_crs(epsg=4326)
     return mge
@@ -44,7 +47,7 @@ def country(to_4326=False):
 
 
 def municipalities(mun_ids=None, to_4326=False):
-    mgm = gp.read_file(f'{folder}/national_macro/mgm2010v5_0/municipios.shp')
+    mgm = gp.read_file(f'{DIR_CenGeo}/national_macro/mgm2010v5_0/municipios.shp')
     mgm['mun_id'] = mgm.CVE_ENT + mgm.CVE_MUN
     mgm = filter_mun_ids(mgm, mun_ids)
     if to_4326:
@@ -53,7 +56,7 @@ def municipalities(mun_ids=None, to_4326=False):
 
 
 def locs_urban(mun_ids=None, loc_ids=None, to_4326=False):
-    mglu = gp.read_file(f'{folder}/national_macro/mglu2010v5_0/poligonos_urbanos.shp')
+    mglu = gp.read_file(f'{DIR_CenGeo}/national_macro/mglu2010v5_0/poligonos_urbanos.shp')
     mglu['mun_id'] = mglu.CVE_ENT + mglu.CVE_MUN
     mglu['loc_id'] = mglu.CVE_ENT + mglu.CVE_MUN + mglu.CVE_LOC
     mglu = filter_mun_ids(mglu, mun_ids)
@@ -62,7 +65,7 @@ def locs_urban(mun_ids=None, loc_ids=None, to_4326=False):
         mglu = mglu.to_crs(epsg=4326)
     # add population
     pop_mglu = census.pop_loc_urban()
-    mglu.merge(pop_mglu[['loc_id', 'pobtot']], on='loc_id', how='left')
+    mglu = mglu.merge(pop_mglu[['loc_id', 'pobtot']], on='loc_id', how='left')
     return mglu
 
 
@@ -71,11 +74,11 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
     if not mglr_only:
         mgar_pls = _agebs_mzas('Rural', 'Ageb', mun_ids, loc_ids, to_4326)
 
-    mglr_pts = gp.read_file(f'{folder}/national_macro/mglr2010v5_0/localidades_rurales.shp')
-    mglr_pts = filter_mun_ids(mglr_pts, mun_ids)
-    mglr_pts = filter_loc_ids(mglr_pts, loc_ids)
+    mglr_pts = gp.read_file(f'{DIR_CenGeo}/national_macro/mglr2010v5_0/localidades_rurales.shp')
     mglr_pts['mun_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN
     mglr_pts['loc_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN + mglr_pts.CVE_LOC
+    mglr_pts = filter_mun_ids(mglr_pts, mun_ids)
+    mglr_pts = filter_loc_ids(mglr_pts, loc_ids)
     # remove the pts that has polygons
     if not mglr_only:
         mglr_pts = mglr_pts[~mglr_pts.loc_id.isin(mgar_pls.loc_id)].copy()
@@ -121,15 +124,15 @@ def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=Fal
     assert urb_or_rur in ('Urban', 'Rural')
     assert ageb_or_mza in ('Ageb', 'Mza')
     if mun_ids is None:
-        mun_ids = [fn[-16:-11] for fn in glob.glob(f'{folder}/{urb_or_rur}{ageb_or_mza}/*')]
+        mun_ids = [fn[-16:-11] for fn in glob.glob(f'{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/*')]
 
     mg = []
     for mun_id in mun_ids:
-        path = f'{folder}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz'
+        path = f'{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz'
         if not os.path.exists(path):
-            print(mun_id, 'not exists')
+            print(f'{urb_or_rur}{ageb_or_mza}/{mun_id} not exists')
             continue
-        ageb = gp.read_file(f'gzip://{folder}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz')
+        ageb = gp.read_file(f'gzip://{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz')
         mg.append(ageb)
     mg = pd.concat(mg, ignore_index=True, sort=False)
 
@@ -154,9 +157,40 @@ def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=Fal
     return mg
 
 
-def mpa_all():
-    return
+def mpa_all(to_4326=False):
+    """
+    Source: http://www.conapo.gob.mx/es/CONAPO/Datos_Abiertos_Delimitacion_de_Zonas_Metropolitanas
+    The shape and population haven't been checked against census 2010.
+    :return: metropolitan areas sorted by population, in mex.crs
+    """
+    zm = gp.read_file(f'{DIR_ZM}/ZM_2010.shp')
+
+    # this file have better NOM_SUN
+    zm_meta = pd.read_csv(f'{DIR_ZM}/ZM_00-10_info.csv')
+    zm_meta = zm_meta[zm_meta['AÑO'] == 2010]
+
+    suns = []
+
+    for cve_sun, sun in zm.groupby('CVE_SUN'):
+        geometry = cascaded_union(sun.geometry.tolist())
+        pob = sun.POB_2010.sum()
+        zm_name = zm_meta[zm_meta.CVE_ZM == cve_sun].ZM.values[0].replace('Zona metropolitana de ', '').replace(
+            'Zona metropolitana del ', '')
+        suns.append({'NOM_SUN': zm_name, 'CVE_SUN': cve_sun, 'pobtot': pob,
+                     'mun_ids': ','.join(sun.CVE_MUN1.tolist()), 'geometry': geometry})
+
+    suns = gp.GeoDataFrame(suns)
+    suns.crs = zm.crs
+    suns = suns.sort_values('pobtot', ascending=False)
+    if to_4326:
+        suns = suns.to_crs(epsg=4326)
+    return suns
 
 
-def mpa_with_crime_survey():
-    return
+def mpa_urban_per_municipality(to_4326=False):
+    zm_meta = pd.read_csv(f'{DIR_ZM}/ZM_00-10_info.csv')
+    zm_meta = zm_meta[zm_meta['AÑO'] == 2010]
+    zm_meta['mun_id'] = zm_meta.CVE_MUN.apply(lambda x: f'{x:05}')
+    mglu_zm = locs_urban(zm_meta.mun_id.tolist(), to_4326=to_4326)
+    mglu_zm = mglu_zm.merge(zm_meta[['mun_id', 'CVE_ZM']]).rename(columns={'CVE_ZM': 'CVE_SUN'})
+    return mglu_zm
