@@ -1,45 +1,17 @@
-import pandas as pd
-
 import glob
 import os
-import geopandas as gp
 import sys
 
-sys.path.insert(0, '../../')
-import src.mex as mex
+import geopandas as gp
+import pandas as pd
 from shapely.ops import cascaded_union
 
+import src.mex as mex
+import src.mex.census2010 as census
+
+sys.path.insert(0, '../../')
 folder = 'data/mexico/geography-socioeconomics/2010CensusGeography'
-folder_census = 'data/mexico/geography-socioeconomics/2010Census'
 
-
-def pop_mza_urban():
-    pop_mgzu = pd.read_csv(f'{folder_census}/urban_mza_pop.csv.gz',
-                           dtype={'entidad': str, 'mun': str, 'loc': str, 'ageb': str, 'mza': str})
-    pop_mgzu['mza_id'] = pop_mgzu.entidad + pop_mgzu.mun + pop_mgzu[
-        'loc'] + pop_mgzu.ageb + pop_mgzu.mza
-    return pop_mgzu
-
-
-def pop_ageb_urban():
-    pop_mgau = pd.read_csv(f'{folder_census}/urban_ageb_pop.csv',
-                           dtype={'entidad': str, 'mun': str, 'loc': str, 'ageb': str, 'mza': str})
-    pop_mgau['ageb_id'] = pop_mgau.entidad + pop_mgau.mun + pop_mgau['loc'] + pop_mgau.ageb
-    return pop_mgau
-
-
-def pop_loc_rural():
-    pop_mglr = pd.read_csv(f'{folder_census}/rural_loc_pop.csv.gz',
-                           dtype={'entidad': str, 'mun': str, 'loc': str, 'mza': str}, index_col=0)
-    pop_mglr['loc_id'] = pop_mglr.entidad + pop_mglr.mun + pop_mglr['loc']
-    return pop_mglr
-
-
-def pop_loc_urban():
-    pop_mgau = pop_ageb_urban()
-    pop_mglu = pop_mgau.groupby(['entidad', 'mun', 'loc']).pobtot.sum().reset_index()
-    pop_mglu['loc_id'] = pop_mglu.entidad + pop_mglu.mun + pop_mglu['loc']
-    return pop_mglu
 
 
 def filter_mun_ids(gpdf, mun_ids):
@@ -89,7 +61,7 @@ def locs_urban(mun_ids=None, loc_ids=None, to_4326=False):
     if to_4326:
         mglu = mglu.to_crs(epsg=4326)
     # add population
-    pop_mglu = pop_loc_urban()
+    pop_mglu = census.pop_loc_urban()
     mglu.merge(pop_mglu[['loc_id', 'pobtot']], on='loc_id', how='left')
     return mglu
 
@@ -119,7 +91,7 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
         mglr = mglr_pts
 
     # add population
-    pop_mglr = pop_loc_rural()
+    pop_mglr = census.pop_loc_rural()
     mglr = mglr.merge(pop_mglr[['loc_id', 'pobtot']], on='loc_id', how='left')
     mglr.pobtot = mglr.pobtot.fillna(0).astype(int)
     return mglr
@@ -127,6 +99,21 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
 
 def agebs_rural():
     return locs_rural()
+
+
+def agebs_urban(mun_ids=None, loc_ids=None, to_4326=False):
+    mgau = _agebs_mzas('Urban', 'Ageb', mun_ids, loc_ids, to_4326)
+    pop_mgau = census.pop_ageb_urban()
+    mgau = mgau.merge(pop_mgau[['ageb_id', 'pobtot']], on='ageb_id', how='left')
+    return mgau
+
+
+def mzas_urban(mun_ids=None, loc_ids=None, to_4326=False):
+    # mzas crs is 4326 (saved by "Mexico 2010 Census stats and basemap 2Organize.ipynb")
+    mgmzu = _agebs_mzas('Urban', 'Mza', mun_ids, loc_ids, to_4326)
+    pop_mgmzu = census.pop_mza_urban()
+    mgmzu.merge(pop_mgmzu[['mza_id', 'pobtot']], on='mza_id', how='left')
+    return mgmzu
 
 
 def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=False):
@@ -165,42 +152,6 @@ def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=Fal
     if not to_4326:
         mg = mg.to_crs(mex.crs)
     return mg
-
-
-def agebs_urban(mun_ids=None, loc_ids=None, to_4326=False):
-    mgau = _agebs_mzas('Urban', 'Ageb', mun_ids, loc_ids, to_4326)
-    pop_mgau = pop_ageb_urban()
-    mgau = mgau.merge(pop_mgau[['ageb_id', 'pobtot']], on='ageb_id', how='left')
-    return mgau
-
-
-def mzas_urban(mun_ids=None, loc_ids=None, to_4326=False):
-    # mzas crs is 4326 (saved by "Mexico 2010 Census stats and basemap 2Organize.ipynb")
-    # if mun_ids is None:
-    #     mun_ids = [fn[-16:-11] for fn in glob.glob(f'{folder}/UrbanMza/*')]
-    #
-    # mgmzu = []
-    # for mun_id in mun_ids:
-    #     path = f'{folder}/UrbanMza/{mun_id}.geojson.gz'
-    #     if not os.path.exists(path):
-    #         print(mun_id, 'not exists')
-    #         continue
-    #     urb_ageb = gp.read_file(f'gzip://{folder}/UrbanMza/{mun_id}.geojson.gz')
-    #     mgmzu.append(urb_ageb)
-    # mgmzu = pd.concat(mgmzu, ignore_index=True)
-    #
-    # mgmzu['CVE_MZA'] = mgmzu.CVEGEO.apply(lambda x: x[13:])
-    # mgmzu['CVE_AGEB'] = mgmzu.CVEGEO.apply(lambda x: x[9:13])
-    # mgmzu['loc_id'] = mgmzu.CVEGEO.apply(lambda x: x[:9])
-    # mgmzu['mun_id'] = mgmzu.CVEGEO.apply(lambda x: x[:5])
-    # mgmzu = filter_loc_ids(mgmzu, loc_ids)
-    # if not to_4326:
-    #     mgmzu = mgmzu.to_crs(mex.crs)
-
-    mgmzu = _agebs_mzas('Urban', 'Mza', mun_ids, loc_ids, to_4326)
-    pop_mgmzu = pop_mza_urban()
-    mgmzu.merge(pop_mgmzu[['mza_id', 'pobtot']], on='mza_id', how='left')
-    return mgmzu
 
 
 def mpa_all():
