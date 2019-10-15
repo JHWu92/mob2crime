@@ -12,3 +12,5 @@ crs = {'proj': 'lcc',
        'units': 'm',
        'no_defs': True,
        'towgs84': '0,0,0,0,0,0,0'}
+
+clat, clon = 19.381495, -99.139095
