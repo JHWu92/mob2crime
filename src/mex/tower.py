@@ -14,6 +14,8 @@ import src.utils.gis as gis
 import geopandas as gp
 from shapely.geometry import Point
 
+DIR_INTPL = 'data/mex_tw_intpl'
+
 
 def pts(to_4326=False):
     tower_info_path = mex_root + mex_tower_fn
@@ -35,7 +37,7 @@ def pts(to_4326=False):
 
 
 def voronoi(to_4326=False):
-    fn = 'data/mex_tw_intpl/voronoi.geojson'
+    fn = f'{DIR_INTPL}/voronoi.geojson'
 
     if os.path.exists(fn):
         tvor = gp.read_file(fn)
@@ -58,3 +60,26 @@ def voronoi(to_4326=False):
     if to_4326:
         tvor = tvor.to_crs(epsg=4326)
     return tvor
+
+
+def voronoi_x_region(rkind, to_4326=False):
+    path = f'{DIR_INTPL}/tvor_x_{rkind}.csv'
+
+    if os.path.exists(path):
+        x_mapping = pd.read_csv(path, index_col=0, dtype=str)
+    else:
+        if rkind=='mgl':
+            r = region.localidads(to_4326=to_4326)
+        elif rkind=='mgm':
+            r= region.municipalities(to_4326=to_4326)
+        elif rkind=='mpa':
+            r=region.mpa_all(to_4326)
+        elif rkind=='mga':
+            r=region.agebs(to_4326=to_4326)
+        else:
+            raise ValueError('rkind',rkind,'not valid')
+        tvor = voronoi(to_4326)
+        x_mapping = gp.sjoin(tvor, r)['index_right'].to_frame().reset_index()
+        x_mapping.rename(columns={'index': 'gtid', 'index_right': r.index.name}, inplace=True)
+        x_mapping.to_csv(path)
+    return x_mapping
