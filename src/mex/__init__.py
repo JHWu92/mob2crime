@@ -10,7 +10,6 @@ crs = {'proj': 'lcc',
        'y_0': 0,
        'ellps': 'GRS80',
        'units': 'm',
-       'no_defs': True,
-       'towgs84': '0,0,0,0,0,0,0'}
+       'no_defs': True}
 
 clat, clon = 19.381495, -99.139095
