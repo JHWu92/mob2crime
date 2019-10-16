@@ -31,6 +31,7 @@ def filter_loc_ids(gpdf, loc_ids):
 
 def states(to_4326=False):
     mge = gp.read_file(f'{DIR_CenGeo}/national_macro/mge2010v5_0/estados.shp')
+    mge.set_index('CVE_ENT', inplace=True)
     if to_4326:
         mge = mge.to_crs(epsg=4326)
     return mge
@@ -50,6 +51,7 @@ def municipalities(mun_ids=None, to_4326=False):
     mgm = gp.read_file(f'{DIR_CenGeo}/national_macro/mgm2010v5_0/municipios.shp')
     mgm['mun_id'] = mgm.CVE_ENT + mgm.CVE_MUN
     mgm = filter_mun_ids(mgm, mun_ids)
+    mgm.set_index('mun_id', inplace=True)
     if to_4326:
         mgm = mgm.to_crs(epsg=4326)
     return mgm
@@ -66,17 +68,21 @@ def locs_urban(mun_ids=None, loc_ids=None, to_4326=False):
     # add population
     pop_mglu = census.pop_loc_urban()
     mglu = mglu.merge(pop_mglu[['loc_id', 'pobtot']], on='loc_id', how='left')
+    mglu.set_index('loc_id', inplace=True)
     return mglu
 
 
-def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr_only=False):
+def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr_only=False, verbose=0):
     # mglr in this file has only (lat,lon) points
     if not mglr_only:
-        mgar_pls = _agebs_mzas('Rural', 'Ageb', mun_ids, loc_ids, to_4326)
+        mgar_pls = _agebs_mzas('Rural', 'Ageb', mun_ids, loc_ids, to_4326, verbose)
+        not_valid = mgar_pls.geometry.apply(lambda x: x.is_valid)
+        mgar_pls.loc[mgar_pls[~not_valid.values].index, 'geometry'] = mgar_pls[~not_valid].geometry.buffer(0)
 
     mglr_pts = gp.read_file(f'{DIR_CenGeo}/national_macro/mglr2010v5_0/localidades_rurales.shp')
     mglr_pts['mun_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN
     mglr_pts['loc_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN + mglr_pts.CVE_LOC
+    mglr_pts['ageb_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN + mglr_pts.CVE_LOC + mglr_pts.CVE_AGEB
     mglr_pts = filter_mun_ids(mglr_pts, mun_ids)
     mglr_pts = filter_loc_ids(mglr_pts, loc_ids)
     # remove the pts that has polygons
@@ -84,7 +90,7 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
         mglr_pts = mglr_pts[~mglr_pts.loc_id.isin(mgar_pls.loc_id)].copy()
 
     if buffer_point:
-        mglr_pts.geometry = mglr_pts.buffer(buffer_point)
+        mglr_pts.geometry = mglr_pts.buffer(buffer_point, resolution=4)
     if to_4326:
         mglr_pts = mglr_pts.to_crs(epsg=4326)
 
@@ -97,17 +103,35 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
     pop_mglr = census.pop_loc_rural()
     mglr = mglr.merge(pop_mglr[['loc_id', 'pobtot']], on='loc_id', how='left')
     mglr.pobtot = mglr.pobtot.fillna(0).astype(int)
+    mglr.set_index('loc_id', inplace=True)
+
     return mglr
 
 
-def agebs_rural():
-    return locs_rural()
+def localidads(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, verbose=0):
+    mglu = locs_urban(mun_ids, loc_ids, to_4326)
+    mglr = locs_rural(mun_ids, loc_ids, to_4326, buffer_point, mglr_only=False, verbose=verbose)
+    return pd.concat([mglu, mglr], sort=False)
+
+
+def agebs(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, verbose=0):
+    mgau = agebs_urban(mun_ids, loc_ids, to_4326)
+    mgar = agebs_rural(mun_ids, loc_ids, to_4326, buffer_point, mglr_only=False, verbose=verbose)
+    mga = pd.concat([mgau, mgar], sort=False)
+    return mga
+
+
+def agebs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr_only=False, verbose=0):
+    mgar = locs_rural(mun_ids, loc_ids, to_4326, buffer_point, mglr_only, verbose)
+    mgar = mgar.reset_index().set_index('ageb_id')
+    return mgar
 
 
 def agebs_urban(mun_ids=None, loc_ids=None, to_4326=False):
     mgau = _agebs_mzas('Urban', 'Ageb', mun_ids, loc_ids, to_4326)
     pop_mgau = census.pop_ageb_urban()
     mgau = mgau.merge(pop_mgau[['ageb_id', 'pobtot']], on='ageb_id', how='left')
+    mgau.set_index('ageb_id', inplace=True)
     return mgau
 
 
@@ -119,7 +143,7 @@ def mzas_urban(mun_ids=None, loc_ids=None, to_4326=False):
     return mgmzu
 
 
-def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=False):
+def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=False, verbose=0):
     # ageb crs is 4326 (saved by "Mexico 2010 Census stats and basemap 2Organize.ipynb")
     assert urb_or_rur in ('Urban', 'Rural')
     assert ageb_or_mza in ('Ageb', 'Mza')
@@ -130,7 +154,8 @@ def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=Fal
     for mun_id in mun_ids:
         path = f'{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz'
         if not os.path.exists(path):
-            print(f'{urb_or_rur}{ageb_or_mza}/{mun_id} not exists')
+            if verbose:
+                print(f'{urb_or_rur}{ageb_or_mza}/{mun_id} not exists')
             continue
         ageb = gp.read_file(f'gzip://{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz')
         mg.append(ageb)
@@ -184,6 +209,8 @@ def mpa_all(to_4326=False):
     suns = suns.sort_values('pobtot', ascending=False)
     if to_4326:
         suns = suns.to_crs(epsg=4326)
+    suns.set_index('CVE_SUN', inplace=True)
+
     return suns
 
 
