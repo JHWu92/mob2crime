@@ -156,10 +156,11 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
         the mapping from polys1 to polys2
     """
 
-    do_crs_transform = True
+    do_crs_transform = area_crs is not None
     cur_crs = crs_normalization(cur_crs)
     area_crs = crs_normalization(area_crs)
 
+    # TODO: this CRS check is really strange
     # make sure CRS is set correctly
     if cur_crs is None and polys1.crs is None and polys2.crs is None:
         if area_crs is None:
@@ -179,7 +180,7 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
 
     # get intersections between polys1 and polys2
     # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
-    print('computing the intersection between p1 and p2')
+    print(f'computing the intersection between p1 {pname1} and p2 {pname2}')
     ps1tops2 = gp.sjoin(polys1, polys2)
     itxns = []
     for li, row in ps1tops2.iterrows():
