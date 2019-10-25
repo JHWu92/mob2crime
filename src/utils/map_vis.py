@@ -5,6 +5,9 @@ import pandas as pd
 
 
 def geojson_per_row_color_col(gpdf, name, color='blue', tip_cols=None, some_map=None, color_col=None):
+    """
+    $('path').attr({'fill-opacity':1, 'stroke':'#000000', 'stroke-width':1})
+    """
     if color_col:
         from branca.colormap import linear
         cmap = linear.Reds_09.scale()
