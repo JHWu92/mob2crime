@@ -8,6 +8,8 @@ from shapely.ops import cascaded_union
 
 import src.mex as mex
 import src.mex.census2010 as census
+import src.mex_helper as mex_helper
+import src.utils.gis as gis
 
 # if not os.getcwd().endswith('mob2crime'):
 #     os.chdir('..')
@@ -69,6 +71,7 @@ def locs_urban(mun_ids=None, loc_ids=None, to_4326=False):
     pop_mglu = census.pop_loc_urban()
     mglu = mglu.merge(pop_mglu[['loc_id', 'pobtot']], on='loc_id', how='left')
     mglu.set_index('loc_id', inplace=True)
+    mglu['Type'] = 'Urban'
     return mglu
 
 
@@ -104,7 +107,7 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
     mglr = mglr.merge(pop_mglr[['loc_id', 'pobtot']], on='loc_id', how='left')
     mglr.pobtot = mglr.pobtot.fillna(0).astype(int)
     mglr.set_index('loc_id', inplace=True)
-
+    mglr['Type'] = 'Rural'
     return mglr
 
 
@@ -132,6 +135,7 @@ def agebs_urban(mun_ids=None, loc_ids=None, to_4326=False):
     pop_mgau = census.pop_ageb_urban()
     mgau = mgau.merge(pop_mgau[['ageb_id', 'pobtot']], on='ageb_id', how='left')
     mgau.set_index('ageb_id', inplace=True)
+    mgau['Type'] = 'Urban'
     return mgau
 
 
@@ -140,6 +144,7 @@ def mzas_urban(mun_ids=None, loc_ids=None, to_4326=False):
     mgmzu = _agebs_mzas('Urban', 'Mza', mun_ids, loc_ids, to_4326)
     pop_mgmzu = census.pop_mza_urban()
     mgmzu.merge(pop_mgmzu[['mza_id', 'pobtot']], on='mza_id', how='left')
+    mgmzu['Type'] = 'Urban'
     return mgmzu
 
 
@@ -221,3 +226,55 @@ def mpa_urban_per_municipality(to_4326=False):
     mglu_zm = locs_urban(zm_meta.mun_id.tolist(), to_4326=to_4326)
     mglu_zm = mglu_zm.merge(zm_meta[['mun_id', 'CVE_ZM']]).rename(columns={'CVE_ZM': 'CVE_SUN'})
     return mglu_zm
+
+
+def ageb_ids_per_mpa(redo=False):
+    path= f'{DIR_ZM}/ageb_ids_per_mpa.csv'
+    if os.path.exists(path) and not redo:
+        mapping = pd.read_csv(path, index_col=0, dtype=str)
+        mapping.CVE_SUN = mapping.CVE_SUN.astype(int)
+        return mapping
+    zms = mpa_all()
+    mun_ids_to_cve_sun = []
+    mun_ids = set()
+    for cve_sun, mids in zms.mun_ids.apply(lambda x: x.split(',')).iteritems():
+        for mid in mids:
+            mun_ids.add(mid)
+            mun_ids_to_cve_sun.append((cve_sun, mid))
+    zms_agebs = agebs(mun_ids=list(mun_ids))
+    mapping = zms_agebs.reset_index().merge(pd.DataFrame(mun_ids_to_cve_sun, columns=['CVE_SUN', 'mun_id']))[
+        ['CVE_SUN', 'mun_id', 'loc_id', 'ageb_id', 'Type']]
+    import csv
+    mapping.to_csv(path,quoting=csv.QUOTE_NONNUMERIC)
+    return mapping
+
+
+def mpa_grids(side, per_mun=False, to_4326=False):
+    grids = mex_helper.grids('metropolitans_all',side)
+    if not to_4326:
+        grids = grids.to_crs(mex.crs)
+    if per_mun:
+        from shapely.ops import cascaded_union
+        mg_mappings = ageb_ids_per_mpa()
+        mun_ids_urban = mg_mappings[mg_mappings.Type == 'Urban'].mun_id.unique()
+        zms_mglu = locs_urban(mun_ids_urban)
+        mgmu = []
+        for mid, lu in zms_mglu.groupby('mun_id'):
+            mgmu.append({
+                'mun_id': mid,
+                'geometry': cascaded_union(lu.geometry),
+                'pobtot': lu.pobtot.sum(),
+            })
+        mgmu = gp.GeoDataFrame(mgmu)
+        mgmu.crs = mex.crs
+        grids_x_zmsmgmu = gis.polys2polys(grids.to_crs(mex.crs), mgmu, 'grid', 'mgmu', area_crs=mex.crs,
+                                          intersection_only=False)
+        grids_per_mun = grids_x_zmsmgmu.merge(mgmu[['mun_id']], left_on='mgmu', right_index=True).merge(
+            mg_mappings[['mun_id', 'CVE_SUN']].drop_duplicates())[['grid', 'mun_id', 'CVE_SUN', 'geometry']]
+        grids_per_mun.grid = grids_per_mun.mun_id + '-' + grids_per_mun.grid.astype(str)
+        grids = grids_per_mun
+        if to_4326:
+            grids=grids.to_crs(epsg=4326)
+
+
+    return grids
