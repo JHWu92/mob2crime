@@ -2,7 +2,7 @@ import os
 from itertools import chain
 
 import pandas as pd
-
+import src.mex_helper as mex_helper
 import src.mex as mex
 import src.mex.regions2010 as region
 import src.mex.tower as tower
@@ -11,19 +11,33 @@ import src.utils.gis as gis
 DIR_INTPL = 'data/mex_tw_intpl'
 
 
-def to_mpa_agebs(by='area'):
+def interpolate_stats(tw_avg, t2region):
+    # there are grids without any call throughout the observation period
+    #     print('grid_average')
+    r_avg = t2region.merge(tw_avg, left_on='tower', right_index=True, how='left')
+
+    for h in range(24):
+        h = str(h)
+        r_avg[h] = r_avg[h] * r_avg['weight']
+
+    r_avg = r_avg.drop('weight', axis=1).groupby(level=0).sum()  # fillna=0 by default
+
+    return r_avg
+
+
+def to_mpa_agebs(by='area', return_geom=False):
     assert by in ('area', 'pop'), f'by={by}, it should be either "area" or "pop"'
 
     path = f'{DIR_INTPL}/tower_to_mpa_agebs_by_area.csv' if by == 'area' else f'{DIR_INTPL}/tower_to_mpa_agebs_by_pop.csv'
-    if os.path.exists(path):
+    if not return_geom and os.path.exists(path):
         print('to_map_agebs loading existing file', path)
         t2ageb = pd.read_csv(path, index_col=0)
         return t2ageb
 
-    tvor = tower.voronoi()
     zms = region.mpa_all()
     mun_ids = sorted(list(set(chain(*zms.mun_ids.apply(lambda x: x.split(','))))))
     zms_agebs = region.agebs(mun_ids=mun_ids)
+    tvor = tower.voronoi()
     tvor_x_zm = tower.voronoi_x_region('mpa')
     zms_tvors = tvor.loc[tvor_x_zm.gtid.unique()]
 
@@ -68,8 +82,44 @@ def to_mpa_agebs(by='area'):
         t2ageb = t2covered_ageb[t2covered_ageb.ageb.isin(zms_agebs.index)]
 
     t2ageb[['tower', 'ageb', 'weight']].to_csv(path)
+    if return_geom:
+        return t2ageb
     return t2ageb[['tower', 'ageb', 'weight']]
 
 
-def to_mpa_grids(by='area'):
-    return
+def to_mpa_grids(side, by='area', per_mun=False):
+    assert by in ('area', 'pop'), f'by={by}, it should be either "area" or "pop"'
+    per_mun_str = 'per_mun_' if per_mun else ''
+    path = f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}by_area.csv' if by == 'area' \
+        else f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}by_pop.csv'
+
+    if os.path.exists(path):
+        print('to_map_grids loading existing file', path)
+        t2g = pd.read_csv(path, index_col=0)
+        return t2g
+
+
+    grids = region.mpa_grids(side, per_mun, to_4326=False)
+    if by == 'area':
+        tvor = tower.voronoi()
+        tvor_x_zm = tower.voronoi_x_region('mpa')
+        zms_tvors = tvor.loc[tvor_x_zm.gtid.unique()]
+        t2g = gis.polys2polys(zms_tvors, grids, 'tower', 'grid', area_crs=mex.crs, intersection_only=False)
+    else:
+        t2ageb_by_pop = to_mpa_agebs('pop',return_geom=True)
+        t2ageb_by_pop_rename = t2ageb_by_pop.rename(
+            columns={'iPop': 'txa_pop', 'Pop': 'ageb_pop', 'weight': 'w_t2a_bP'})
+
+        txa2g_raw = gis.polys2polys(t2ageb_by_pop, grids, pname1='txa', pname2='grid', area_crs=mex.crs,
+                                    intersection_only=False)
+
+        txa2g = txa2g_raw.rename(columns={'iarea': 'txa2g_area', 'weight': 'w_txa2g_bA'})
+        txa2g = txa2g.merge(t2ageb_by_pop_rename.drop(['geometry', 'iarea'], axis=1), left_on='txa', right_index=True)
+        txa2g['weight'] = txa2g.w_t2a_bP * txa2g.w_txa2g_bA
+        txa2g = txa2g[['weight', 'txa', 'ageb', 'tower', 'w_t2a_bP', 'grid', 'w_txa2g_bA',
+                       'txa_pop', 'tower_pop', 'txa2g_area', 'txa_area', 'geometry',
+                       'pobtot', 'tower_area', 'grid_area', 'ageb_area']]
+        t2g = txa2g.groupby(['tower', 'grid']).weight.sum().reset_index()
+
+    t2g[['tower', 'grid', 'weight']].to_csv(path)
+    return t2g[['tower', 'grid', 'weight']]
