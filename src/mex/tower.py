@@ -67,6 +67,7 @@ def voronoi_x_region(rkind, to_4326=False):
 
     if os.path.exists(path):
         x_mapping = pd.read_csv(path, index_col=0, dtype=str)
+        if rkind=='mpa': x_mapping.CVE_SUN = x_mapping.CVE_SUN.astype(int)
     else:
         if rkind=='mgl':
             r = region.localidads(to_4326=to_4326)
