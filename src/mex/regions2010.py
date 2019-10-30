@@ -251,9 +251,21 @@ def ageb_ids_per_mpa(redo=False):
 
 def mpa_grids(side, per_mun=False, to_4326=False):
     grids = mex_helper.grids('metropolitans_all',side)
-    if not to_4326:
-        grids = grids.to_crs(mex.crs)
-    if per_mun:
+    if not per_mun:
+        zms = mpa_all()
+        nom2sun = {}
+        for sun, nom in zms['NOM_SUN'].to_frame().iterrows():
+            if sun == 13:
+                nom2sun['Zona metropolitana del ' + nom.values[0]] = sun
+            else:
+                nom2sun['Zona metropolitana de ' + nom.values[0]] = sun
+        grids['CVE_SUN'] = grids.metropolitan.apply(lambda x: nom2sun[x])
+
+        if not to_4326:
+            grids = grids.to_crs(mex.crs)
+
+    else:
+        print('dividing grids by municipality')
         from shapely.ops import cascaded_union
         mg_mappings = ageb_ids_per_mpa()
         mun_ids_urban = mg_mappings[mg_mappings.Type == 'Urban'].mun_id.unique()
@@ -276,5 +288,6 @@ def mpa_grids(side, per_mun=False, to_4326=False):
         if to_4326:
             grids=grids.to_crs(epsg=4326)
 
+    grids.set_index('grid', inplace=True)
 
     return grids
