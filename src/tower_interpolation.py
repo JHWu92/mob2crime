@@ -13,6 +13,7 @@ import src.utils.idw as idw
 
 DIR_INTPL = 'data/mex_tw_intpl'
 
+
 def interpolate_idw(tw_avg, side, per_mun=False, max_k=10):
     per_mun_str = '_per_mun' if per_mun else ''
     path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}{per_mun_str}.csv'
@@ -42,6 +43,7 @@ def interpolate_idw(tw_avg, side, per_mun=False, max_k=10):
     df.to_csv(path)
     return df
 
+
 def _interpolate_idw_per_hour(grids, tws, tws_x_zms, z, max_k=10):
     # print('computing weight for each SUN')
     gs_avg = []
@@ -55,29 +57,13 @@ def _interpolate_idw_per_hour(grids, tws, tws_x_zms, z, max_k=10):
         idw_tree = idw.tree(zm_t_coords, zm_z)
         k = min(len(zm_t_coords), max_k)
         g_avg = idw_tree(zm_g_coords, k=k)
-        scale = zm_z.sum()/g_avg.sum()
+        scale = zm_z.sum() / g_avg.sum()
         g_avg *= scale
         g_avg = pd.DataFrame(g_avg, index=zm_grids.index)
         gs_avg.append(g_avg)
 
     gs_avg = pd.concat(gs_avg)
     return gs_avg
-
-def interpolate_idw_stats(tw_avg, idw_weight):
-    # TODO: is wrong
-    grids_avg = []
-    for sun, sun_weight in idw_weight.items():
-        tw_ids = set(tw_avg.index) & set(sun_weight.index)
-        z = tw_avg.loc[tw_ids]
-        weights = sun_weight.loc[tw_ids]
-        zi = np.dot(weights.T, z)
-        scale = (z.sum(axis=0) / zi.sum(axis=0)).values
-        zi_scale = zi * scale[:, None].T
-        g_avg = pd.DataFrame(zi_scale, index=weights.columns.astype(int), columns=z.columns)
-        g_avg.index.name = 'grid'
-        grids_avg.append(g_avg)
-    grids_avg = pd.concat(grids_avg)
-    return grids_avg
 
 
 def interpolate_stats(tw_avg, t2region):
@@ -191,53 +177,3 @@ def to_mpa_grids(side, by='area', per_mun=False):
 
     t2g[['tower', 'grid', 'weight']].to_csv(path)
     return t2g[['tower', 'grid', 'weight']]
-
-
-def inv_dist_weight(side, per_mun=False):
-    # TODO: This function is wrong
-    from scipy.spatial.distance import cdist
-    import geopandas as gp
-    per_mun_str = 'per_mun_' if per_mun else ''
-    directory = f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}idw/'
-
-    if os.path.exists(directory):
-        print('to_map_grids_idw loading existing file', directory)
-        import glob
-        all_weights = {}
-        for fn in glob.glob(directory + '*'):
-            all_weights[int(fn.split('/')[-1][:-4])] = pd.read_csv(fn, index_col=0)
-
-        return all_weights
-    else:
-        os.makedirs(directory)
-
-    grids = region.mpa_grids(side, per_mun, to_4326=False)
-
-    print('reading tower points')
-    tws = mex.tower.pts()
-    zms = region.mpa_all()
-    tws_x_zms = gp.sjoin(tws, zms)[['gtid', 'index_right']]
-
-    print('computing weight for each SUN')
-    all_weights = {}
-
-    for sun in grids.CVE_SUN.unique():
-        zm_grids = grids[grids.CVE_SUN == sun]
-        zm_tws = tws[tws.gtid.isin(tws_x_zms[tws_x_zms.index_right == sun].gtid)]
-        zm_g_coords = zm_grids.geometry.apply(lambda x: x.centroid.coords[0]).tolist()
-        zm_t_coords = zm_tws.geometry.apply(lambda x: x.coords[0]).tolist()
-        dist = cdist(zm_t_coords, zm_g_coords)
-        # In IDW, weights are 1 / distance
-        weights = 1.0 / dist
-        # Make weights sum to one
-        # weights /= weights.sum(axis=0)
-        weights = pd.DataFrame(weights, index=zm_tws.gtid, columns=zm_grids.index)
-        weights.index.name = 'tower'
-
-        #     weights= pd.melt(weights.reset_index(), id_vars=['tower'], value_name='weight')
-        #     weights['CVE_SUN'] = sun
-        #     all_weights.append(weights)
-        all_weights[sun] = weights
-        weights.to_csv(f'{directory}{sun}.csv')
-
-    return all_weights
