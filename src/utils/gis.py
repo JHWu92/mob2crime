@@ -179,9 +179,16 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
         assign_crs(polys2, cur_crs)
 
     # get intersections between polys1 and polys2
-    # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
     print(f'computing the intersection between p1 {pname1} and p2 {pname2}')
-    ps1tops2 = gp.sjoin(polys1, polys2)
+    if len(polys1) > 10* len(polys2):
+        # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
+        # so swap p1 and p2 first in sjoin, then swap back the index
+        print(f'len(p1)={len(polys1)} > 10 * len(p2)={len(polys2)}, swap them')
+        ps1tops2 = gp.sjoin(polys2, polys1)
+        ps1tops2 = ps1tops2.reset_index().rename(columns={'index': 'index_right', 'index_right': 'index'}).set_index('index')
+        ps1tops2.index.name = None
+    else:
+        ps1tops2 = gp.sjoin(polys1, polys2)
     itxns = []
     for li, row in ps1tops2.iterrows():
         p2 = polys2.loc[row.index_right].geometry
