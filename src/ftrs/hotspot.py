@@ -9,7 +9,7 @@ def keep_hotspot(avg, hotspot_type='loubar'):
     for h in avg:
         arr = avg[h]
         # arr can be all 0, which would break the loubar method, and there is no hotspot
-        if arr.sum()==0:
+        if arr.sum() == 0:
             continue
 
         if hotspot_type == 'loubar':
@@ -34,7 +34,7 @@ def avg_dist(geoms):
     return pair_dist / l / (l - 1)
 
 
-def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, hotspot_type='loubar'):
+def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=False, hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
     print('working on', end=' ')
@@ -50,7 +50,9 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, hotspot_type
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
         if per_mun:
             hs_avg = []
-            for _, mun in zm_mapping[zm_mapping.Type == 'Urban'].groupby('mun_id'):
+            for _, mun in zm_mapping.groupby('mun_id'):
+                if urb_only:
+                    mun = mun[mun.Type == 'Urban']
                 mun_ageb_avg = avg_a.loc[mun.ageb_id].copy()
                 if len(mun) < 10:
                     # print(mid, len(mun))
@@ -66,7 +68,7 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, hotspot_type
     return n_hs_average, comp_coef
 
 
-def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
+def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False,hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
     print('working on', end=' ')
@@ -85,7 +87,7 @@ def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
                 mun_avg_g = avg_g.reindex(mun_g.index, fill_value=0).copy()
                 # print(sun, mun_g.mun_id.iloc[0],'mun g not in avg', set(mun_g.index) - set(avg_g.index))
                 # print('mun_avg_g isnull', mun_avg_g.isnull().sum(), mun_avg_g.shape)
-                if len(mun_g) < 10 :
+                if len(mun_g) < 10:
                     continue
                 mun_hot = keep_hotspot(mun_avg_g, hotspot_type)
                 hs_avg.append(mun_hot)
