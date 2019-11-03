@@ -219,6 +219,54 @@ def mpa_all(to_4326=False):
     return suns
 
 
+def mpa_all_variants(per_mun=False, urb_only=False, to_4326=False):
+    mg_mappings = ageb_ids_per_mpa()
+    mid2sun = mg_mappings[['CVE_SUN', 'mun_id']].drop_duplicates().set_index('mun_id')
+    zms_mun_ids = mg_mappings.mun_id.unique()
+
+    if not urb_only:
+        if not per_mun:
+            variant = mpa_all()
+        else:
+            zms_mgms = municipalities(zms_mun_ids)
+            variant = zms_mgms.join(mid2sun)
+    else:
+        # load urban localidads
+        zms_mglus = locs_urban(zms_mun_ids)
+        # merge locs to form locs area in muninicipalities
+        zms_mgmus = []
+        for mid, lu in zms_mglus.groupby('mun_id'):
+            zms_mgmus.append({
+                'mun_id': mid,
+                'geometry': cascaded_union(lu.geometry),
+                'pobtot': lu.pobtot.sum(),
+            })
+        zms_mgmus = gp.GeoDataFrame(zms_mgmus)
+        zms_mgmus.crs = mex.crs
+        zms_mgmus.set_index('mun_id', inplace=True)
+        zms_mgmus = zms_mgmus.join(mid2sun)
+
+        if per_mun:
+            variant = zms_mgmus
+        else:
+            zmus = []
+            for sun, zm_mgmus in zms_mgmus.groupby('CVE_SUN'):
+                zmus.append({
+                    'CVE_SUN': sun,
+                    'geometry': cascaded_union(zm_mgmus.geometry),
+                    'pobtot': zm_mgmus.pobtot.sum(),
+                    'mun_ids': ','.join(zm_mgmus.index)
+                })
+
+            zmus = gp.GeoDataFrame(zmus)
+            zmus.crs = mex.crs
+            zmus.set_index('CVE_SUN', inplace=True)
+            variant = zmus
+    if to_4326:
+        variant = variant.to_crs(epsg=4326)
+    return variant
+
+
 def mpa_urban_per_municipality(to_4326=False):
     zm_meta = pd.read_csv(f'{DIR_ZM}/ZM_00-10_info.csv')
     zm_meta = zm_meta[zm_meta['AÑO'] == 2010]
@@ -229,7 +277,7 @@ def mpa_urban_per_municipality(to_4326=False):
 
 
 def ageb_ids_per_mpa(redo=False):
-    path= f'{DIR_ZM}/ageb_ids_per_mpa.csv'
+    path = f'{DIR_ZM}/ageb_ids_per_mpa.csv'
     if os.path.exists(path) and not redo:
         mapping = pd.read_csv(path, index_col=0, dtype=str)
         mapping.CVE_SUN = mapping.CVE_SUN.astype(int)
@@ -245,13 +293,13 @@ def ageb_ids_per_mpa(redo=False):
     mapping = zms_agebs.reset_index().merge(pd.DataFrame(mun_ids_to_cve_sun, columns=['CVE_SUN', 'mun_id']))[
         ['CVE_SUN', 'mun_id', 'loc_id', 'ageb_id', 'Type']]
     import csv
-    mapping.to_csv(path,quoting=csv.QUOTE_NONNUMERIC)
+    mapping.to_csv(path, quoting=csv.QUOTE_NONNUMERIC)
     return mapping
 
 
-def mpa_grids(side, per_mun=False, to_4326=False):
-    grids = mex_helper.grids('metropolitans_all',side)
-    if not per_mun:
+def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
+    grids = mex_helper.grids('metropolitans_all', side)
+    if not per_mun and not urb_only:
         zms = mpa_all()
         nom2sun = {}
         for sun, nom in zms['NOM_SUN'].to_frame().iterrows():
@@ -263,31 +311,21 @@ def mpa_grids(side, per_mun=False, to_4326=False):
 
         if not to_4326:
             grids = grids.to_crs(mex.crs)
+        grids = grids.set_index('grid')[['CVE_SUN', 'geometry']]
 
     else:
-        print('dividing grids by municipality')
-        from shapely.ops import cascaded_union
-        mg_mappings = ageb_ids_per_mpa()
-        mun_ids_urban = mg_mappings[mg_mappings.Type == 'Urban'].mun_id.unique()
-        zms_mglu = locs_urban(mun_ids_urban)
-        mgmu = []
-        for mid, lu in zms_mglu.groupby('mun_id'):
-            mgmu.append({
-                'mun_id': mid,
-                'geometry': cascaded_union(lu.geometry),
-                'pobtot': lu.pobtot.sum(),
-            })
-        mgmu = gp.GeoDataFrame(mgmu)
-        mgmu.crs = mex.crs
-        grids_x_zmsmgmu = gis.polys2polys(grids.to_crs(mex.crs), mgmu, 'grid', 'mgmu', area_crs=mex.crs,
-                                          intersection_only=False)
-        grids_per_mun = grids_x_zmsmgmu.merge(mgmu[['mun_id']], left_on='mgmu', right_index=True).merge(
-            mg_mappings[['mun_id', 'CVE_SUN']].drop_duplicates())[['grid', 'mun_id', 'CVE_SUN', 'geometry']]
-        grids_per_mun.grid = grids_per_mun.mun_id + '-' + grids_per_mun.grid.astype(str)
-        grids = grids_per_mun
-        if to_4326:
-            grids=grids.to_crs(epsg=4326)
+        grids = grids.to_crs(mex.crs)
 
-    grids.set_index('grid', inplace=True)
+        variant = mpa_all_variants(per_mun=per_mun, urb_only=urb_only)
+        vname = variant.index.name
+        grids_x_variant = gis.polys2polys(grids, variant, 'grid', vname, area_crs=mex.crs, intersection_only=False)
+
+        grids_per_mun = grids_x_variant.merge(variant.drop('geometry', axis=1), left_on=vname, right_index=True)
+        grids_per_mun.grid = grids_per_mun[vname].astype(str) + '-' + grids_per_mun.grid.astype(str)
+
+        cols = ['grid', vname, 'geometry']
+        if vname != 'CVE_SUN':
+            cols.append('CVE_SUN')
+        grids = grids_per_mun[cols].set_index('grid')
 
     return grids
