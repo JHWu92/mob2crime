@@ -327,5 +327,7 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
         if vname != 'CVE_SUN':
             cols.append('CVE_SUN')
         grids = grids_per_mun[cols].set_index('grid')
+        if to_4326:
+            grids = grids.to_crs(epsg=4326)
 
     return grids
