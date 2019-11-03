@@ -142,18 +142,20 @@ def to_mpa_agebs(by='area', return_geom=False):
     return t2ageb[['tower', 'ageb', 'weight']]
 
 
-def to_mpa_grids(side, by='area', per_mun=False):
+def to_mpa_grids(side, by='area', per_mun=False, urb_only=False, grids=None):
     assert by in ('area', 'pop'), f'by={by}, it should be either "area" or "pop"'
-    per_mun_str = 'per_mun_' if per_mun else ''
-    path = f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}by_area.csv' if by == 'area' \
-        else f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}by_pop.csv'
+    per_mun_str = 'perMun' if per_mun else 'whole'
+    urb_only_str = 'urb' if urb_only else 'uNr'
+    path = f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}_{urb_only_str}_{by}.csv'
 
     if os.path.exists(path):
         print('to_map_grids loading existing file', path)
         t2g = pd.read_csv(path, index_col=0)
         return t2g
+    # allow to pass on grids, without loading it again
+    if grids is None:
+        grids = region.mpa_grids(side, per_mun=per_mun, urb_only=urb_only, to_4326=False)
 
-    grids = region.mpa_grids(side, per_mun, to_4326=False)
     if by == 'area':
         tvor = tower.voronoi()
         tvor_x_zm = tower.voronoi_x_region('mpa')
