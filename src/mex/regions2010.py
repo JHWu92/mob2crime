@@ -298,6 +298,19 @@ def ageb_ids_per_mpa(redo=False):
 
 
 def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
+    per_mun_str = 'perMun' if per_mun else 'whole'
+    urb_only_str = 'urb' if urb_only else 'uNr'
+
+    path = f'{DIR_ZM}/grids_{side}_{per_mun_str}_{urb_only_str}.geojson.gz'
+
+    if os.path.exists(path):
+        print('loading existing file', path)
+        grids = gp.read_file(f'gzip://{path}')
+        grids = grids.set_index('id')
+        grids.index.name='grid'
+        return grids
+
+    print('=====computing mpa_grids')
     grids = mex_helper.grids('metropolitans_all', side)
     if not per_mun and not urb_only:
         zms = mpa_all()
@@ -314,6 +327,7 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
         grids = grids.set_index('grid')[['CVE_SUN', 'geometry']]
 
     else:
+        import gzip
         grids = grids.to_crs(mex.crs)
 
         variant = mpa_all_variants(per_mun=per_mun, urb_only=urb_only)
@@ -327,6 +341,10 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
         if vname != 'CVE_SUN':
             cols.append('CVE_SUN')
         grids = grids_per_mun[cols].set_index('grid')
+
+        with gzip.open(path, 'wt') as fout:
+            fout.write(grids.to_json())
+
         if to_4326:
             grids = grids.to_crs(epsg=4326)
 
