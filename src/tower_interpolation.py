@@ -13,9 +13,11 @@ import src.utils.idw as idw
 
 DIR_INTPL = 'data/mex_tw_intpl'
 
+PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
+URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
-def interpolate_idw(tw_avg, side, per_mun=False, max_k=10):
-    per_mun_str = '_per_mun' if per_mun else ''
+def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None):
+    per_mun_str = PER_MUN_STR(per_mun)
     path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}{per_mun_str}.csv'
 
     if os.path.exists(path):
@@ -24,12 +26,17 @@ def interpolate_idw(tw_avg, side, per_mun=False, max_k=10):
         g_avg.columns = g_avg.columns.astype(str)
         return g_avg
 
+    print('computing interpolate_idw', per_mun, urb_only)
     print('reading tower points')
     tws = mex.tower.pts()
     zms = region.mpa_all()
     tws_x_zms = gp.sjoin(tws, zms)[['gtid', 'index_right']]
 
-    grids = region.mpa_grids(side, per_mun, to_4326=False)
+    # allow to pass on grids, without loading it again
+    if grids is None:
+        grids = region.mpa_grids(side, per_mun=per_mun, urb_only=urb_only, to_4326=False)
+
+    print('interpolating per hour')
     g_avg = {}
 
     for h in range(24):
@@ -144,14 +151,14 @@ def to_mpa_agebs(by='area', return_geom=False):
 
 def to_mpa_grids(side, by='area', per_mun=False, urb_only=False, grids=None):
     assert by in ('area', 'pop'), f'by={by}, it should be either "area" or "pop"'
-    per_mun_str = 'perMun' if per_mun else 'whole'
-    urb_only_str = 'urb' if urb_only else 'uNr'
-    path = f'{DIR_INTPL}/tower_to_mpa_g{side}_{per_mun_str}_{urb_only_str}_{by}.csv'
+    path = f'{DIR_INTPL}/tower_to_mpa_g{side}_{PER_MUN_STR(per_mun)}_{URB_ONLY_STR(urb_only)}_{by}.csv'
 
     if os.path.exists(path):
         print('to_map_grids loading existing file', path)
         t2g = pd.read_csv(path, index_col=0)
         return t2g
+
+    print('computing to_map_grids', by, per_mun, urb_only)
     # allow to pass on grids, without loading it again
     if grids is None:
         grids = region.mpa_grids(side, per_mun=per_mun, urb_only=urb_only, to_4326=False)
