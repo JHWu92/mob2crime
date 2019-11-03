@@ -5,9 +5,11 @@ import src.mex.tower as tower
 import src.mex_helper as mex_helper
 import src.ftrs.dilatation as dilatation
 import pandas as pd
+import datetime as dt
 
 zms_sort_cols = ['Area', 'Area_urb', 'Area_rur', 'Area_urb_pcnt', 'Area_rur_pcnt', 'pobtot', 'pob_urb', 'pob_rur',
                  'pob_urb_pcnt', 'pob_rur_pcnt']
+G_side = 500
 
 
 def _zm_pops(zms, mg_mappings):
@@ -41,28 +43,32 @@ def _zm_pops(zms, mg_mappings):
 
 
 def load_geoms():
+    print('loading zms')
     mg_mappings = region.ageb_ids_per_mpa()
     zms = region.mpa_all()
     zms['Area'] = zms.area
     zms = _zm_pops(zms, mg_mappings)
 
+    print('loading agebs')
     zms_mun_ids = mg_mappings.mun_id.unique()
     zms_loc_ids = mg_mappings.loc_id.unique()
     zms_agebs = region.agebs(zms_mun_ids, zms_loc_ids)
 
+    print('loading voronoi')
     tvor = tower.voronoi()
     tvor_x_zms = tower.voronoi_x_region('mpa')
     tvor_x_zms = tvor_x_zms[tvor_x_zms.CVE_SUN.isin(zms.index.astype(str))]
     zms_tvor = tvor.loc[set(tvor_x_zms.gtid)]
 
     zms_grids = {}
-    for side in [1000, 2000]:
-        for per_mun in [False, True]:
-            zms_grids[(side, per_mun)] = region.mpa_grids(side, per_mun)
+    for per_mun in [False, True]:
+        for urb_only in [False, True]:
+            print('=' * 20, 'loading grids', per_mun, urb_only, dt.datetime.now())
+            zms_grids[(per_mun, urb_only)] = region.mpa_grids(G_side, per_mun, urb_only)
     return zms, zms_agebs, zms_tvor, zms_grids, mg_mappings
 
 
-def interpolation():
+def interpolation(zms_grids):
     call_direction = 'out+in'
     aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction)
     avg_tw = pd.DataFrame(aver['wd']).T
@@ -74,40 +80,44 @@ def interpolation():
         avg_a[by] = tw_int.interpolate_stats(avg_tw, t2a)
 
     avg_g = {}
-    for side in [1000, 2000]:
-        for by in ['area', 'pop']:
-            for per_mun in [False, True]:
-                t2g = tw_int.to_mpa_grids(side, by=by, per_mun=per_mun)
+    for by in ['area', 'pop']:
+        for per_mun in [False, True]:
+            for urb_only in [False, True]:
+                grids = zms_grids[(per_mun, urb_only)]
+                t2g = tw_int.to_mpa_grids(G_side, by=by, per_mun=per_mun, urb_only=urb_only, grids=grids)
                 t2g.set_index('grid', inplace=True)
-                avg_g[(side, by, per_mun)] = tw_int.interpolate_stats(avg_tw, t2g)
+                avg_g[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2g)
 
     avg_idw = {}
-    for side in [1000, 2000]:
-        for per_mun in [False, True]:
-            avg_idw[(side, per_mun)] = tw_int.interpolate_idw(avg_tw, side, per_mun=per_mun, max_k=10)
+    for per_mun in [False, True]:
+        for urb_only in [False, True]:
+            grids = zms_grids[(per_mun, urb_only)]
+            avg_idw[(per_mun, urb_only)] = tw_int.interpolate_idw(avg_tw, G_side, per_mun=per_mun, urb_only=urb_only,
+                                                                  max_k=10, grids=grids)
 
     return avg_tw, avg_a, avg_g, avg_idw
 
 
 def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
+    # TODO: cannot handle 500*500 grids
     print('computing dv_a')
     dv_a = {}
     for by, avg in avg_a.items():
-        area_col= 'Area'
+        area_col = 'Area'
         dv_a[by] = dilatation.dv_for_mpa_ageb(avg, zms, zms_agebs, area_col)
 
     print('computing dv_g')
     dv_g = {}
-    for (side, by, per_mun), avg in avg_g.items():
+    for (by, per_mun, urb_only), avg in avg_g.items():
         # TODO: need to think about whether we want to use urban area when considering only per_mun
         # area_col = 'Area' if not per_mun else 'Area_urb'
-        zms_g = zms_grids[(side, per_mun)]
-        dv_g[(side, by, per_mun)] = dilatation.dv_for_mpa_grids(avg, zms, zms_g)
+        zms_g = zms_grids[(per_mun, urb_only)]
+        dv_g[(by, per_mun, urb_only)] = dilatation.dv_for_mpa_grids(avg, zms, zms_g)
 
     print('computing dv_idw')
     dv_idw = {}
     for key, avg in avg_idw.items():
-        area_col= 'Area'
+        area_col = 'Area'
         zms_g = zms_grids[key]
         dv_idw[key] = dilatation.dv_for_mpa_grids(avg, zms, zms_g, area_col)
 
@@ -115,9 +125,41 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
 
 
 def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_mapping, hotspot_type='loubar'):
+    # compute hot stats
+    hotspot_type = 'loubar'
+    n_hs_a = {}
+    comp_coef_a = {}
     for by in ['area', 'pop']:
         for per_mun in [False, True]:
-            n_hs_average, comp_coef = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mapping, per_mun,
-                                                                 hotspot_type)
+            for urb_only in [False, True]:
+                key = (by, per_mun, urb_only)
+                print(key, end=' ')
+                n, cc = ftr_hs.hs_stats_ageb(
+                    avg_a[by], zms, zms_agebs, mg_mapping, per_mun, urb_only, hotspot_type)
+                n_hs_a[key] = n
+                comp_coef_a[key] = cc
 
+    n_hs_g = {}
+    comp_coef_g = {}
+    for key, avg in avg_g.items():
+        print(key, end=' ')
+        by, per_mun, urb_only = key
+        zms_g = zms_grids[(per_mun, urb_only)]
+        # TODO: is it no need to pass on urb_only to has_stats_grid?
+        n, cc = ftr_hs.hs_stats_grid(
+            avg, zms, zms_g, per_mun, hotspot_type)
+        n_hs_g[key] = n
+        comp_coef_g[key] = cc
+
+    n_hs_idw = {}
+    comp_coef_idw = {}
+    for key, avg in avg_idw.items():
+        print(key, end=' ')
+        per_mun, urb_only = key
+        zms_g = zms_grids[key]
+        # TODO: is it no need to pass on urb_only to has_stats_grid?
+        n, cc = ftr_hs.hs_stats_grid(
+            avg, zms, zms_g, per_mun, hotspot_type)
+        n_hs_idw[key] = n
+        comp_coef_idw[key] = cc
     return
