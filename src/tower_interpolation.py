@@ -16,17 +16,21 @@ DIR_INTPL = 'data/mex_tw_intpl'
 PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
+def interpolate_tower(tw_avg, by='area', per_mun=False, urb_only=False):
+    return
+
+
 def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None):
     per_mun_str = PER_MUN_STR(per_mun)
-    path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}{per_mun_str}.csv'
+    path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
 
     if os.path.exists(path):
         print('interpolate_idw loading existing file', path)
-        g_avg = pd.read_csv(path, index_col=0)
+        g_avg = pd.read_csv(path, index_col=0, compression='gzip')
         g_avg.columns = g_avg.columns.astype(str)
         return g_avg
 
-    print('computing interpolate_idw', per_mun, urb_only)
+    print('====computing interpolate_idw', per_mun, urb_only)
     print('reading tower points')
     tws = mex.tower.pts()
     zms = region.mpa_all()
@@ -34,6 +38,7 @@ def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids
 
     # allow to pass on grids, without loading it again
     if grids is None:
+        print('reading grids file')
         grids = region.mpa_grids(side, per_mun=per_mun, urb_only=urb_only, to_4326=False)
 
     print('interpolating per hour')
@@ -47,7 +52,7 @@ def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids
         g.columns = [h]
         df.append(g)
     df = pd.concat(df, axis=1)
-    df.to_csv(path)
+    df.to_csv(path, compression='gzip')
     return df
 
 
