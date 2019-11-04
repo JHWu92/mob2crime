@@ -34,6 +34,45 @@ def avg_dist(geoms):
     return pair_dist / l / (l - 1)
 
 
+def hs_stats_vor(avg_v, zms, per_mun=False, hotspot_type='loubar'):
+    import src.mex.tower as tower
+
+    t_pts = tower.pts()
+    t_pts = t_pts.merge(avg_v.reset_index(), left_on='gtid', right_on='tower', how='right').set_index('index')[
+        ['geometry']]
+    n_hs_average = {}
+    comp_coef = {}
+    print('working on', end=' ')
+    for sun, avg in avg_v.groupby('CVE_SUN'):
+        print(sun, end=' ')
+        zm = zms.loc[sun]
+        zm_ts = t_pts.loc[avg.index]
+        # avg has columns of CVE_SUN and mun_id, need to get rid of them before entering the HotSpot
+        hs = HotSpot(avg[[str(i) for i in range(24)]].copy(), zm_ts, zm, hotspot_type)
+        hs_avg = None
+
+        if per_mun:
+            hs_avg = []
+            for mun_id, mun_avg in avg.groupby('mun_id'):
+                if len(mun_avg) <= 1:
+                    continue
+                elif len(mun_avg) < 5:
+                    # TODO: loubar is likely not working when the array is small, force to use average
+                    print(f'(`{mun_id}`={len(mun_avg)} using `average`)', end=' ')
+                    mun_hot = keep_hotspot(mun_avg[[str(i) for i in range(24)]].copy(), hotspot_type='average')
+                else:
+                    # avg has columns of CVE_SUN and mun_id, need to get rid of them before entering the keep_hotspot
+                    mun_hot = keep_hotspot(mun_avg[[str(i) for i in range(24)]].copy(), hotspot_type)
+                hs_avg.append(mun_hot)
+            hs_avg = pd.concat(hs_avg).reindex(avg.index, fill_value=0)
+
+        hs.calc_stats(hs_avg)
+        n_hs_average[sun] = hs.n_hs_average
+        comp_coef[sun] = hs.compacity_coefficient
+    print()
+    return n_hs_average, comp_coef
+
+
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=False, hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
@@ -68,7 +107,7 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
     return n_hs_average, comp_coef
 
 
-def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False,hotspot_type='loubar'):
+def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
     print('working on', end=' ')
