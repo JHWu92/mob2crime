@@ -1,5 +1,4 @@
 import src.tower_interpolation as tw_int
-from src.tower_interpolation import PER_MUN_STR, URB_ONLY_STR
 import src.ftrs.hotspot as ftr_hs
 import src.mex.regions2010 as region
 import src.mex.tower as tower
@@ -8,7 +7,9 @@ import src.ftrs.dilatation as dilatation
 import pandas as pd
 import datetime as dt
 
-ADMIN_STR = lambda x, y: f'{PER_MUN_STR(x)}_{URB_ONLY_STR(y)}'
+PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'WholeZM'
+URB_ONLY_DISPLAY = lambda x: 'UrbanOnly' if x else 'UrbanRural'
+ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
 zms_sort_cols = ['Area', 'Area_urb', 'Area_rur', 'Area_urb_pcnt', 'Area_rur_pcnt', 'pobtot', 'pob_urb', 'pob_rur',
                  'pob_urb_pcnt', 'pob_rur_pcnt']
