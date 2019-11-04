@@ -1,4 +1,5 @@
 import src.tower_interpolation as tw_int
+from src.tower_interpolation import PER_MUN_STR, URB_ONLY_STR
 import src.ftrs.hotspot as ftr_hs
 import src.mex.regions2010 as region
 import src.mex.tower as tower
@@ -6,6 +7,8 @@ import src.mex_helper as mex_helper
 import src.ftrs.dilatation as dilatation
 import pandas as pd
 import datetime as dt
+
+ADMIN_STR = lambda x, y: f'{PER_MUN_STR(x)}_{URB_ONLY_STR(y)}'
 
 zms_sort_cols = ['Area', 'Area_urb', 'Area_rur', 'Area_urb_pcnt', 'Area_rur_pcnt', 'pobtot', 'pob_urb', 'pob_rur',
                  'pob_urb_pcnt', 'pob_rur_pcnt']
@@ -124,7 +127,7 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
     return dv_a, dv_g, dv_idw
 
 
-def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_mapping, hotspot_type='loubar'):
+def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_mappings, hotspot_type='loubar'):
     # compute hot stats
     hotspot_type = 'loubar'
     n_hs_a = {}
@@ -135,7 +138,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_m
                 key = (by, per_mun, urb_only)
                 print(key, end=' ')
                 n, cc = ftr_hs.hs_stats_ageb(
-                    avg_a[by], zms, zms_agebs, mg_mapping, per_mun, urb_only, hotspot_type)
+                    avg_a[by], zms, zms_agebs, mg_mappings, per_mun, urb_only, hotspot_type)
                 n_hs_a[key] = n
                 comp_coef_a[key] = cc
 
