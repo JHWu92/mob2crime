@@ -34,37 +34,47 @@ def avg_dist(geoms):
     return pair_dist / l / (l - 1)
 
 
-def hs_stats_vor(avg_v, zms, per_mun=False, hotspot_type='loubar'):
+def hs_stats_vor(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar'):
     import src.mex.tower as tower
-
-    t_pts = tower.pts()
-    t_pts = t_pts.merge(avg_v.reset_index(), left_on='gtid', right_on='tower', how='right').set_index('index')[
-        ['geometry']]
+    tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
+    t_pts = tower.pts().set_index('gtid')
     n_hs_average = {}
     comp_coef = {}
+
     print('working on', end=' ')
-    for sun, avg in avg_v.groupby('CVE_SUN'):
+    for sun, zm_mapping in tXzms.groupby('CVE_SUN'):
         print(sun, end=' ')
+
         zm = zms.loc[sun]
-        zm_ts = t_pts.loc[avg.index]
-        # avg has columns of CVE_SUN and mun_id, need to get rid of them before entering the HotSpot
-        hs = HotSpot(avg[[str(i) for i in range(24)]].copy(), zm_ts, zm, hotspot_type)
+        zm_t = t_pts.loc[zm_mapping.gtid].copy()
+        zm_avg_t = avg_tw.reindex(zm_mapping.gtid, fill_value=0).copy()
+        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type)
         hs_avg = None
 
         if per_mun:
+            # build hs_avg per mun
             hs_avg = []
-            for mun_id, mun_avg in avg.groupby('mun_id'):
-                if len(mun_avg) <= 1:
+            for mun_id, mun in zm_mapping.groupby('mun_id'):
+                mun_avg_t = zm_avg_t.loc[mun.gtid].copy()
+
+                if len(mun_avg_t) <= 1:
+                    print(f'(`{mun_id}`={len(mun_avg_t)} no hotspot)', end=' ')
                     continue
-                elif len(mun_avg) < 5:
+                elif len(mun_avg_t) < 3:
                     # TODO: loubar is likely not working when the array is small, force to use average
-                    print(f'(`{mun_id}`={len(mun_avg)} using `average`)', end=' ')
-                    mun_hot = keep_hotspot(mun_avg[[str(i) for i in range(24)]].copy(), hotspot_type='average')
+                    print(f'(`{mun_id}`={len(mun_avg_t)} using `average`)', end=' ')
+                    mun_hot = keep_hotspot(mun_avg_t, hotspot_type='average')
                 else:
-                    # avg has columns of CVE_SUN and mun_id, need to get rid of them before entering the keep_hotspot
-                    mun_hot = keep_hotspot(mun_avg[[str(i) for i in range(24)]].copy(), hotspot_type)
+                    mun_hot = keep_hotspot(mun_avg_t.copy(), hotspot_type)
+
                 hs_avg.append(mun_hot)
-            hs_avg = pd.concat(hs_avg).reindex(avg.index, fill_value=0)
+            # concat hs_avg, in case hs_avg is empty
+            if len(hs_avg) != 0:
+                hs_avg = pd.concat(hs_avg).reindex(zm_avg_t.index, fill_value=0)
+            else:
+                # each mun has just one tower
+                print(f'(`zm{sun}` has no mun_hotspot)')
+                hs_avg = pd.DataFrame([], index=zm_avg_t.index, columns=zm_avg_t.columns).fillna(0)
 
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
