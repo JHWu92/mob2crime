@@ -62,23 +62,36 @@ def voronoi(to_4326=False):
     return tvor
 
 
+def pts_x_region(rkind, per_mun=False, urb_only=False):
+    if rkind == 'mpa':
+        zms = region.mpa_all_variants(per_mun, urb_only, to_4326=False)
+        t_pts = pts(to_4326=False)
+        tXzms = gp.sjoin(t_pts, zms, op='within')
+        tXzms.rename(columns={'index_right': zms.index.name}, inplace=True)
+        cols = ['gtid', 'CVE_SUN', 'mun_id'] if per_mun else ['gtid', 'CVE_SUN']
+        tXzms = tXzms[cols]
+    else:
+        raise ValueError('rkind', rkind, 'not valid')
+    return tXzms
+
+
 def voronoi_x_region(rkind, to_4326=False):
     path = f'{DIR_INTPL}/tvor_x_{rkind}.csv'
 
     if os.path.exists(path):
         x_mapping = pd.read_csv(path, index_col=0, dtype=str)
-        if rkind=='mpa': x_mapping.CVE_SUN = x_mapping.CVE_SUN.astype(int)
+        if rkind == 'mpa': x_mapping.CVE_SUN = x_mapping.CVE_SUN.astype(int)
     else:
-        if rkind=='mgl':
+        if rkind == 'mgl':
             r = region.localidads(to_4326=to_4326)
-        elif rkind=='mgm':
-            r= region.municipalities(to_4326=to_4326)
-        elif rkind=='mpa':
-            r=region.mpa_all(to_4326)
-        elif rkind=='mga':
-            r=region.agebs(to_4326=to_4326)
+        elif rkind == 'mgm':
+            r = region.municipalities(to_4326=to_4326)
+        elif rkind == 'mpa':
+            r = region.mpa_all(to_4326)
+        elif rkind == 'mga':
+            r = region.agebs(to_4326=to_4326)
         else:
-            raise ValueError('rkind',rkind,'not valid')
+            raise ValueError('rkind', rkind, 'not valid')
         tvor = voronoi(to_4326)
         x_mapping = gp.sjoin(tvor, r)['index_right'].to_frame().reset_index()
         x_mapping.rename(columns={'index': 'gtid', 'index_right': r.index.name}, inplace=True)
