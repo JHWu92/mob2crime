@@ -16,8 +16,31 @@ DIR_INTPL = 'data/mex_tw_intpl'
 PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
-def interpolate_tower(tw_avg, by='area', per_mun=False, urb_only=False):
-    return
+
+def interpolate_vor(tw_avg, by='area', per_mun=False, urb_only=False):
+    print('computing avg_vor', by, per_mun, urb_only)
+    t2g = to_mpa_agebs(by)
+    mg_mappings = region.ageb_ids_per_mpa()
+    tb = t2g.merge(mg_mappings, left_on='ageb', right_on='ageb_id')
+
+    if urb_only:
+        tb = tb[tb.Type == 'Urban']
+
+    if per_mun:
+        tb = tb.groupby(['tower', 'CVE_SUN', 'mun_id']).weight.sum().reset_index()
+        tb.index = tb.CVE_SUN.astype(str) + '|' + tb.mun_id + '|' + tb.tower
+    else:
+        tb = tb.groupby(['tower', 'CVE_SUN']).weight.sum().reset_index()
+        tb.index = tb.CVE_SUN.astype(str) + '|' + tb.tower
+
+    avg_vor = tb.reset_index().merge(tw_avg, left_on='tower', right_index=True, how='left').fillna(0)
+
+    for h in range(24):
+        h = str(h)
+        avg_vor[h] = avg_vor[h] * avg_vor['weight']
+
+    avg_vor = avg_vor.drop('weight', axis=1).set_index('index')
+    return avg_vor
 
 
 def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None):
