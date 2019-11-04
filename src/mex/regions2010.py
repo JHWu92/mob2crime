@@ -49,11 +49,20 @@ def country(to_4326=False):
     return ctry
 
 
-def municipalities(mun_ids=None, to_4326=False):
+def municipalities(mun_ids=None, to_4326=False,load_pop=False):
     mgm = gp.read_file(f'{DIR_CenGeo}/national_macro/mgm2010v5_0/municipios.shp')
     mgm['mun_id'] = mgm.CVE_ENT + mgm.CVE_MUN
     mgm = filter_mun_ids(mgm, mun_ids)
     mgm.set_index('mun_id', inplace=True)
+    if load_pop:
+        plr = census.pop_loc_rural()
+        plu = census.pop_loc_urban()
+        plr['mun_id'] = plr.entidad + plr.mun
+        plu['mun_id'] = plu.entidad + plu.mun
+        mgm['pobrur'] = plr.groupby('mun_id').pobtot.sum()
+        mgm['pobrur'] = mgm['pobrur'].fillna(0).astype(int)
+        mgm['poburb'] = plu.groupby('mun_id').pobtot.sum()
+        mgm['pobtot'] = mgm['pobrur'] + mgm['poburb']
     if to_4326:
         mgm = mgm.to_crs(epsg=4326)
     return mgm
