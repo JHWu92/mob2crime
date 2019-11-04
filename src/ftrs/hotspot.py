@@ -40,6 +40,8 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
     print('working on', end=' ')
     for sun, zm_mapping in mg_mapping.groupby('CVE_SUN'):
         print(sun, end=' ')
+        if urb_only:
+            zm_mapping = zm_mapping[zm_mapping.Type == 'Urban']
         zm = zms.loc[sun]
         zm_a = zms_agebs.loc[zm_mapping.ageb_id].copy()
         zm_avg_a = avg_a.loc[zm_a.index].copy()
@@ -51,8 +53,6 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
         if per_mun:
             hs_avg = []
             for _, mun in zm_mapping.groupby('mun_id'):
-                if urb_only:
-                    mun = mun[mun.Type == 'Urban']
                 mun_ageb_avg = avg_a.loc[mun.ageb_id].copy()
                 if len(mun) < 10:
                     # print(mid, len(mun))
