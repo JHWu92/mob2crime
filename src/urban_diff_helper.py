@@ -7,7 +7,7 @@ import src.ftrs.dilatation as dilatation
 import pandas as pd
 import datetime as dt
 
-PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'WholeZM'
+PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
 URB_ONLY_DISPLAY = lambda x: 'UrbanOnly' if x else 'UrbanRural'
 ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
