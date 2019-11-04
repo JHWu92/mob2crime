@@ -17,32 +17,6 @@ PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 
-def interpolate_vor(tw_avg, by='area', per_mun=False, urb_only=False):
-    print('computing avg_vor', by, per_mun, urb_only)
-    t2g = to_mpa_agebs(by)
-    mg_mappings = region.ageb_ids_per_mpa()
-    tb = t2g.merge(mg_mappings, left_on='ageb', right_on='ageb_id')
-
-    if urb_only:
-        tb = tb[tb.Type == 'Urban']
-
-    if per_mun:
-        tb = tb.groupby(['tower', 'CVE_SUN', 'mun_id']).weight.sum().reset_index()
-        tb.index = tb.CVE_SUN.astype(str) + '|' + tb.mun_id + '|' + tb.tower
-    else:
-        tb = tb.groupby(['tower', 'CVE_SUN']).weight.sum().reset_index()
-        tb.index = tb.CVE_SUN.astype(str) + '|' + tb.tower
-
-    avg_vor = tb.reset_index().merge(tw_avg, left_on='tower', right_index=True, how='left').fillna(0)
-
-    for h in range(24):
-        h = str(h)
-        avg_vor[h] = avg_vor[h] * avg_vor['weight']
-
-    avg_vor = avg_vor.drop('weight', axis=1).set_index('index')
-    return avg_vor
-
-
 def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None):
     per_mun_str = PER_MUN_STR(per_mun)
     path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
@@ -123,7 +97,7 @@ def to_mpa_agebs(by='area', return_geom=False):
         print('to_map_agebs loading existing file', path)
         t2ageb = pd.read_csv(path, index_col=0)
         return t2ageb
-
+    print('computing t2a', by, return_geom)
     zms = region.mpa_all()
     mun_ids = sorted(list(set(chain(*zms.mun_ids.apply(lambda x: x.split(','))))))
     zms_agebs = region.agebs(mun_ids=mun_ids)
