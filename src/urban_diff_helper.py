@@ -128,7 +128,7 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
     return dv_a, dv_g, dv_idw
 
 
-def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_mappings, hotspot_type='loubar'):
+def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, zms, zms_agebs, zms_grids, mg_mappings, hotspot_type='loubar'):
     # compute hot stats
     hotspot_type = 'loubar'
     n_hs_a = {}
@@ -166,4 +166,14 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids, mg_m
             avg, zms, zms_g, per_mun, hotspot_type)
         n_hs_idw[key] = n
         comp_coef_idw[key] = cc
+
+    n_hs_tw = {}
+    comp_coef_tw = {}
+    for per_mun in [False, True]:
+        for urb_only in [False, True]:
+            key = (per_mun, urb_only)
+            print(key, end=' ')
+            n, cc = ftr_hs.hs_stats_vor(avg_tw, zms, per_mun, urb_only, hotspot_type)
+            n_hs_tw[key] = n
+            comp_coef_tw[key] = cc
     return
