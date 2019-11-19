@@ -173,7 +173,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, zms, zms_agebs, zms_gri
         for urb_only in [False, True]:
             key = (per_mun, urb_only)
             print(key, end=' ')
-            n, cc = ftr_hs.hs_stats_vor(avg_tw, zms, per_mun, urb_only, hotspot_type)
+            n, cc = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hotspot_type)
             n_hs_tw[key] = n
             comp_coef_tw[key] = cc
     return
