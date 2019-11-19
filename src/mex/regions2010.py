@@ -358,3 +358,27 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
             grids = grids.to_crs(epsg=4326)
 
     return grids
+
+def mpa_vors(per_mun=False, urb_only=False, to_4326=False):
+    import src.mex.tower as tower
+    t_pts = tower.pts(to_4326).set_index('gtid')
+    vors = tower.voronoi()
+    variant = mpa_all_variants(per_mun, urb_only)
+    vname = variant.index.name
+
+    t_pts_x_variant = tower.pts_x_region('mpa', per_mun, urb_only)
+    t_pts_x_variant = t_pts_x_variant.merge(t_pts[['geometry']], left_on='gtid', right_index=True)
+    t_pts_x_variant = t_pts_x_variant.rename(columns={'geometry': 'centroid', 'gtid': 'tower'})
+    vors_x_variant = gis.polys2polys(vors, variant, 'tower', vname, area_crs=mex.crs, intersection_only=False)
+    variant_vors = vors_x_variant.merge(t_pts_x_variant, on=['tower', vname], how='left')
+    if to_4326:
+        variant_vors = variant_vors.to_crs(epsg=4326)
+
+    variant_vors['centroid'] = variant_vors.apply(
+        lambda x: x.centroid if x.centroid is not None else x.geometry.centroid, axis=1)
+
+    if per_mun:
+        variant_vors = variant_vors.drop('CVE_SUN', axis=1).merge(variant.reset_index()[['mun_id', 'CVE_SUN']])
+    variant_vors['vor'] = variant_vors[vname].astype(str) + '|' + variant_vors['tower']
+    variant_vors = variant_vors.set_index('vor')
+    return variant_vors
