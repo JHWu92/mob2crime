@@ -97,7 +97,7 @@ def to_mpa_agebs(by='area', return_geom=False):
         print('to_map_agebs loading existing file', path)
         t2ageb = pd.read_csv(path, index_col=0)
         return t2ageb
-    print('computing t2a', by, return_geom)
+    print('computing t2a', by, 'return_geom =', return_geom)
     zms = region.mpa_all()
     mun_ids = sorted(list(set(chain(*zms.mun_ids.apply(lambda x: x.split(','))))))
     zms_agebs = region.agebs(mun_ids=mun_ids)
@@ -146,8 +146,10 @@ def to_mpa_agebs(by='area', return_geom=False):
         t2ageb = t2covered_ageb[t2covered_ageb.ageb.isin(zms_agebs.index)]
 
     t2ageb[['tower', 'ageb', 'weight']].to_csv(path)
+    print('returning t2ageb')
     if return_geom:
         return t2ageb
+
     return t2ageb[['tower', 'ageb', 'weight']]
 
 
@@ -188,3 +190,40 @@ def to_mpa_grids(side, by='area', per_mun=False, urb_only=False, grids=None):
 
     t2g[['tower', 'grid', 'weight']].to_csv(path)
     return t2g[['tower', 'grid', 'weight']]
+
+
+def to_mpa_vors(by='area', per_mun=False, urb_only=False, zms_vors=None):
+    assert by in ('area', 'pop'), f'by={by}, it should be either "area" or "pop"'
+    path = f'{DIR_INTPL}/tower_to_mpa_vors_{PER_MUN_STR(per_mun)}_{URB_ONLY_STR(urb_only)}_{by}.csv'
+
+    if os.path.exists(path):
+        print('to_mpa_vors loading existing file', path)
+        t2v = pd.read_csv(path, index_col=0)
+        return t2v
+
+    print('computing to_map_vors', by, per_mun, urb_only)
+    # allow to pass on zms_vors, without loading it again
+    if zms_vors is None:
+        zms_vors = region.mpa_vors(per_mun=per_mun, urb_only=urb_only, to_4326=False)
+
+    if by == 'area':
+        t2v = zms_vors.reset_index()
+    else:
+        t2ageb_by_pop = to_mpa_agebs('pop', return_geom=True)
+        t2ageb_by_pop_rename = t2ageb_by_pop.rename(
+            columns={'iPop': 'txa_pop', 'Pop': 'ageb_pop', 'weight': 'w_t2a_bP'})
+
+        txa2v_raw = gis.polys2polys(t2ageb_by_pop, zms_vors, pname1='txa', pname2='vor', area_crs=mex.crs,
+                                    intersection_only=False)
+
+        txa2v = txa2v_raw.rename(columns={'iarea': 'txa2v_area', 'weight': 'w_txa2v_bA'})
+        txa2v = txa2v.merge(t2ageb_by_pop_rename.drop(['geometry', 'iarea'], axis=1), left_on='txa', right_index=True)
+        txa2v['weight'] = txa2v.w_t2a_bP * txa2v.w_txa2v_bA
+        txa2v = txa2v[['weight', 'txa', 'ageb', 'tower', 'w_t2a_bP', 'vor', 'w_txa2v_bA',
+                       'txa_pop', 'tower_pop', 'txa2v_area', 'txa_area', 'geometry',
+                       'pobtot', 'tower_area', 'vor_area', 'ageb_area']]
+        t2v = txa2v.groupby(['tower', 'vor']).weight.sum().reset_index()
+        t2v= t2v[t2v.weight>1e-12]
+        t2v[['tower', 'grid', 'weight']].to_csv(path)
+
+    return t2v[['tower', 'vor', 'weight']]
