@@ -4,6 +4,8 @@ import src.utils.gis as gis
 import src.mex.regions2010 as region
 import pandas as pd
 
+HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']  # 10pm - 7am
+WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']  # 9am - 6pm
 
 def keep_hotspot(avg, hotspot_type='loubar'):
     for h in avg:
@@ -34,12 +36,14 @@ def avg_dist(geoms):
     return pair_dist / l / (l - 1)
 
 
-def hs_stats_vor(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar'):
+def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar'):
     import src.mex.tower as tower
     tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
     t_pts = tower.pts().set_index('gtid')
     n_hs_average = {}
     comp_coef = {}
+    comp_coef_home = {}
+    comp_coef_work = {}
 
     print('working on', end=' ')
     for sun, zm_mapping in tXzms.groupby('CVE_SUN'):
@@ -79,13 +83,17 @@ def hs_stats_vor(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='louba
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
         comp_coef[sun] = hs.compacity_coefficient
+        comp_coef_home[sun] = hs.comp_coef_home
+        comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef
+    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
 
 
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=False, hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
+    comp_coef_home = {}
+    comp_coef_work = {}
     print('working on', end=' ')
     for sun, zm_mapping in mg_mapping.groupby('CVE_SUN'):
         print(sun, end=' ')
@@ -113,13 +121,17 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
         comp_coef[sun] = hs.compacity_coefficient
+        comp_coef_home[sun] = hs.comp_coef_home
+        comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef
+    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
 
 
 def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
     n_hs_average = {}
     comp_coef = {}
+    comp_coef_home = {}
+    comp_coef_work = {}
     print('working on', end=' ')
     for sun in sorted(zms.index):
         print(sun, end=' ')
@@ -145,8 +157,10 @@ def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
         comp_coef[sun] = hs.compacity_coefficient
+        comp_coef_home[sun] = hs.comp_coef_home
+        comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef
+    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
 
 
 class HotSpot:
@@ -173,6 +187,8 @@ class HotSpot:
         self.n_hs = (self.hs_avg != 0).sum(axis=0)
         self.n_hs_average = self.n_hs.mean()
         self.persistence = (self.hs_avg != 0).sum(axis=1)
+        self.persistence_home = (self.hs_avg[HOME_HOURS] != 0).sum(axis=1)
+        self.persistence_work = (self.hs_avg[WORK_HOURS] != 0).sum(axis=1)
 
     def _hs_type_by_persistence(self):
         persistence = self.persistence
@@ -184,6 +200,11 @@ class HotSpot:
         self.n_hs_med = len(self.hs_intermediate)
         self.n_hs_mit = len(self.hs_intermittent)
 
+        self.hs_permanent_home = self.persistence_home[self.persistence_home==len(HOME_HOURS)]
+        self.hs_permanent_work = self.persistence_work[self.persistence_work==len(WORK_HOURS)]
+        self.n_hs_per_home = len(self.hs_permanent_home)
+        self.n_hs_per_work = len(self.hs_permanent_work)
+
     def _hs_type_distance(self):
         d_per = avg_dist(self.geoms.loc[self.hs_permanent.index])
         d_med = avg_dist(self.geoms.loc[self.hs_intermediate.index])
@@ -192,3 +213,8 @@ class HotSpot:
         self.compacity_coefficient = d_per / self.sqrt_area
         self.d_per_med = d_per / d_med if d_med != 0 else np.nan
         self.d_med_mit = d_med / d_mit if d_mit != 0 else np.nan
+
+        d_per_home = avg_dist(self.geoms.loc[self.hs_permanent_home.index])
+        d_per_work = avg_dist(self.geoms.loc[self.hs_permanent_work.index])
+        self.comp_coef_home = d_per_home / self.sqrt_area
+        self.comp_coef_work = d_per_work / self.sqrt_area
