@@ -141,6 +141,10 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     Else:
         Weight(i,j) = Area(polys1i in polys2j) / Area(polys1i)
 
+    The Weight(i,j) = x ( 0<x<=1) means that
+        x of the area of polygon i in set polys1 is intersected with polygon j in the set polys2
+        The weight is asymmetric.
+
     :param polys1: GeoDataFrame
         polygons with statistics to distributed over the other polygons
     :param polys2: GeoDataFrame
@@ -151,7 +155,10 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
         the current CRS of polys1 and polys2 (epsg code, proj4 string, or dictionary of projection parameters)
     :param area_crs: int, string, dict
         the equal-area CRS for the area computation
-
+    :param intersection_only: bool, default True
+        If True, the denominator for computing the weight is the sum areas of the all intersections polygon1 has in p2
+        If False, the denominator for computing the weight is the original/total area of polygon1
+        See above for the equation
     :return: pd.DataFrame(columns=[pname1, pname2, 'weight'])
         the mapping from polys1 to polys2
     """
