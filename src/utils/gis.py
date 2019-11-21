@@ -187,12 +187,13 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
 
     # get intersections between polys1 and polys2
     print(f'computing the intersection between p1 {pname1} and p2 {pname2}')
-    if len(polys1) > 10* len(polys2):
+    if len(polys1) > 10 * len(polys2):
         # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
         # so swap p1 and p2 first in sjoin, then swap back the index
         print(f'len(p1)={len(polys1)} > 10 * len(p2)={len(polys2)}, swap them')
         ps1tops2 = gp.sjoin(polys2, polys1)
-        ps1tops2 = ps1tops2.reset_index().rename(columns={'index': 'index_right', 'index_right': 'index'}).set_index('index')
+        ps1tops2 = ps1tops2.reset_index().rename(columns={'index': 'index_right', 'index_right': 'index'}).set_index(
+            'index')
         ps1tops2.index.name = None
     else:
         ps1tops2 = gp.sjoin(polys1, polys2)
@@ -266,7 +267,7 @@ def poly_bbox(poly):
     return poly, lon_min, lat_min, lon_max, lat_max
 
 
-def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False):
+def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False, area_pcnt_thres=0.):
     """compute grids by the bounding box of the given polygon
     :param poly: can be a 4-element tuple representing
                  the bounding box: lon_min, lat_min, lon_max, lat_max,
@@ -276,6 +277,8 @@ def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False):
     :param no_grid_by_area: bool, default False
         if True, and the area of poly <= the grid (side**2), and poly is Polygon
         return the whole polygon as a grid.
+    :param area_pcnt_thres: float, default 0.0
+        remove grids with area less than thres percentage of a full grid
     :return: list of grids
     """
     # poly can be a 4-element tuple representing the bounding box: lon_min, lat_min, lon_max, lat_max
@@ -294,10 +297,16 @@ def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False):
     for i in range(nlon - 1):
         for j in range(nlat - 1):
             g = box(grids_lon[i, j], grids_lat[i, j], grids_lon[i + 1, j + 1], grids_lat[i + 1, j + 1])
-            if not g.intersects(poly):
-                continue
-            if clip_by_poly and not g.within(poly):
-                g = g.intersection(poly)
+            # if grid doesn't belong to poly, don't add to list
+            if not g.intersects(poly): continue
+
+            # if will be faster to run g.within first before doing the intersection
+            if (clip_by_poly or area_pcnt_thres >0) and not g.within(poly):
+                g_clip  = g.intersection(poly)
+                # if smaller than threshold, don't add to list
+                if g_clip.area < side**2 * area_pcnt_thres: continue
+                if clip_by_poly:
+                    g = g_clip
             grids.append(g)
             row_lon_ids.append(i)
             col_lat_ids.append(j)
@@ -305,7 +314,7 @@ def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False):
 
 
 def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
-                      pname='poly', no_grid_by_area=False, verbose=0):
+                      pname='poly', no_grid_by_area=False, clip_by_poly=True, area_pcnt_thres=0., verbose=0):
     """
 
     :param gp_polys: polygons in GeoDataFrame, with/without CRS
@@ -316,6 +325,9 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
     :param no_grid_by_area: bool, default False
         if True, and the area of poly <= the grid (side**2), and poly is Polygon
         return the whole polygon as a grid.
+    :param clip_by_poly: if True, clip the grids by the polygon
+    :param area_pcnt_thres: float, default 0.0
+        remove grids with area less than thres percentage of a full grid
     :return:
     """
     """
@@ -335,7 +347,8 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
     col_ids = []
     for i, row in gp_polys.iterrows():
         if verbose: print('gp_polys_to_grids', i)
-        gs, rids, cids = poly2grids(row.geometry, side, no_grid_by_area=no_grid_by_area)
+        gs, rids, cids = poly2grids(row.geometry, side, no_grid_by_area=no_grid_by_area,
+                                    clip_by_poly=clip_by_poly, area_pcnt_thres=area_pcnt_thres)
         grids.extend(gs)
         indices.extend([i] * len(gs))
         row_ids.extend(rids)
@@ -348,10 +361,10 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
     return grids
 
 
-def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None):
+def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None, largest_len=40000):
     from scipy.spatial.distance import cdist
 
-    if len(polys) > 40000:
+    if len(polys) > largest_len:
         raise ValueError('size of polys is', len(polys), 'could be too large for memory')
 
     cur_crs = crs_normalization(cur_crs)
