@@ -1,11 +1,14 @@
 import numpy as np
-from src.utils import loubar_thres
-import src.utils.gis as gis
-import src.mex.regions2010 as region
 import pandas as pd
+from scipy.spatial.distance import cdist
+
+import src.utils.gis as gis
+from src.ftrs.compactness_index import compacity_coefficient, cohesion, proximity, moment_inertia, mass_moment_inertia
+from src.utils import loubar_thres
 
 HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']  # 10pm - 7am
 WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']  # 9am - 6pm
+
 
 def keep_hotspot(avg, hotspot_type='loubar'):
     for h in avg:
@@ -25,15 +28,39 @@ def keep_hotspot(avg, hotspot_type='loubar'):
     return avg
 
 
-def avg_dist(geoms):
+def _handle_geoms_pairdist_input(geoms=None, pair_dist=None):
+    if geoms is None and pair_dist is None:
+        raise ValueError('either geoms or pair_dist should be passed')
+    if geoms is not None and pair_dist is not None:
+        print('computing pair distance matrix using geoms, pair_dist passed is ignored')
+    if pair_dist is None:
+        pair_dist = pair_dist_matrix(geoms)
+    return pair_dist
+
+
+def avg_dist(geoms=None, pair_dist=None):
+    pair_dist = _handle_geoms_pairdist_input(geoms, pair_dist)
+    n = len(pair_dist)
+    # The pair_dist is not wrong: it is a n*n matrix, the diagonal is zeros, there are n*(n-1) pairs
+    return pair_dist.sum() / n / (n - 1)
+
+
+def avg_dist_square(geoms=None, pair_dist=None):
+    pair_dist = _handle_geoms_pairdist_input(geoms, pair_dist)
+    n = len(pair_dist)
+    # The pair_dist is not wrong: it is a n*n matrix, the diagonal is zeros, there are n*(n-1) pairs
+    return (pair_dist ** 2).sum() / n / (n - 1)
+
+
+def pair_dist_matrix(geoms):
     if len(geoms) <= 1:
         return 0
     l = len(geoms)
     if len(geoms) > 40000:
         print(':::WARNING:::, too many grids, aborted')
         return np.nan
-    pair_dist = gis.polys_centroid_pairwise_dist(geoms, dist_crs=geoms.crs).sum()
-    return pair_dist / l / (l - 1)
+    pair_dist = gis.polys_centroid_pairwise_dist(geoms, dist_crs=geoms.crs)
+    return pair_dist
 
 
 def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar'):
@@ -82,11 +109,12 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
 
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
-        comp_coef[sun] = hs.compacity_coefficient
+        comp_coef[sun] = hs.comp_coef
         comp_coef_home[sun] = hs.comp_coef_home
         comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
+    return {'n_hs_average': n_hs_average, 'comp_coef': comp_coef, 'comp_coef_home': comp_coef_home,
+            'comp_coef_work': comp_coef_work}
 
 
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=False, hotspot_type='loubar'):
@@ -120,11 +148,12 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
 
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
-        comp_coef[sun] = hs.compacity_coefficient
+        comp_coef[sun] = hs.comp_coef
         comp_coef_home[sun] = hs.comp_coef_home
         comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
+    return {'n_hs_average': n_hs_average, 'comp_coef': comp_coef, 'comp_coef_home': comp_coef_home,
+            'comp_coef_work': comp_coef_work}
 
 
 def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
@@ -156,65 +185,142 @@ def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
 
         hs.calc_stats(hs_avg)
         n_hs_average[sun] = hs.n_hs_average
-        comp_coef[sun] = hs.compacity_coefficient
+        comp_coef[sun] = hs.comp_coef
         comp_coef_home[sun] = hs.comp_coef_home
         comp_coef_work[sun] = hs.comp_coef_work
     print()
-    return n_hs_average, comp_coef, comp_coef_home, comp_coef_work
+    return {'n_hs_average': n_hs_average, 'comp_coef': comp_coef, 'comp_coef_home': comp_coef_home,
+            'comp_coef_work': comp_coef_work}
 
 
 class HotSpot:
-    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar'):
+    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0):
         self.sqrt_area = np.sqrt(cover_region.Area)
         self.avg = avg.copy()
         self.geoms = geoms
         self.region = cover_region
         self.hotspot_type = hotspot_type
+        self.raster_resolution = raster_resolution
+        self.verbose = verbose
 
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
-        self._n_hs_persistence()
+        self._number_of_hs()
         self._hs_type_by_persistence()
-        self._hs_type_distance()
+        self._hs_all_compactness()
 
     def _get_hs(self, hs_avg=None):
+        if self.verbose: print('masking out non hot spot, defined by', self.hotspot_type)
         if hs_avg is None:
             self.hs_avg = keep_hotspot(self.avg.copy(), self.hotspot_type)
         else:
             self.hs_avg = hs_avg
 
-    def _n_hs_persistence(self):
+    def _number_of_hs(self):
+        if self.verbose: print('computing number of hot spot per hour')
         self.n_hs = (self.hs_avg != 0).sum(axis=0)
         self.n_hs_average = self.n_hs.mean()
-        self.persistence = (self.hs_avg != 0).sum(axis=1)
-        self.persistence_home = (self.hs_avg[HOME_HOURS] != 0).sum(axis=1)
-        self.persistence_work = (self.hs_avg[WORK_HOURS] != 0).sum(axis=1)
 
     def _hs_type_by_persistence(self):
-        persistence = self.persistence
+        if self.verbose: print('computing persistency and obtaining permanent hot spots')
+        persistence = (self.hs_avg != 0).sum(axis=1)
+        persistence_home = (self.hs_avg[HOME_HOURS] != 0).sum(axis=1)
+        persistence_work = (self.hs_avg[WORK_HOURS] != 0).sum(axis=1)
+
         self.hs_permanent = persistence[persistence == 24]
-        self.hs_intermediate = persistence[(persistence < 24) & (persistence >= 7)]
-        self.hs_intermittent = persistence[(persistence < 7) & (persistence >= 1)]
-
         self.n_hs_per = len(self.hs_permanent)
-        self.n_hs_med = len(self.hs_intermediate)
-        self.n_hs_mit = len(self.hs_intermittent)
 
-        self.hs_permanent_home = self.persistence_home[self.persistence_home==len(HOME_HOURS)]
-        self.hs_permanent_work = self.persistence_work[self.persistence_work==len(WORK_HOURS)]
+        self.hs_permanent_home = persistence_home[persistence_home == len(HOME_HOURS)]
         self.n_hs_per_home = len(self.hs_permanent_home)
+
+        self.hs_permanent_work = persistence_work[persistence_work == len(WORK_HOURS)]
         self.n_hs_per_work = len(self.hs_permanent_work)
 
-    def _hs_type_distance(self):
-        d_per = avg_dist(self.geoms.loc[self.hs_permanent.index])
-        d_med = avg_dist(self.geoms.loc[self.hs_intermediate.index])
-        d_mit = avg_dist(self.geoms.loc[self.hs_intermittent.index])
+        # self.hs_intermediate = persistence[(persistence < 24) & (persistence >= 7)]
+        # self.n_hs_med = len(self.hs_intermediate)
+        # self.hs_intermittent = persistence[(persistence < 7) & (persistence >= 1)]
+        # self.n_hs_mit = len(self.hs_intermittent)
 
-        self.compacity_coefficient = d_per / self.sqrt_area
-        self.d_per_med = d_per / d_med if d_med != 0 else np.nan
-        self.d_med_mit = d_med / d_mit if d_mit != 0 else np.nan
+    def _calc_compactness(self, hs_index, hs_count):
+        target_hs = self.geoms.loc[hs_index]
+        # TODO: this is a simplify version of density, assuming counts in the shape is uniformly
+        #  distributed, but the underlying density is not, the smallest unit of density should
+        #  be the interection of vor and ageb
+        hs_density = hs_count / target_hs.area
+        hs_density.name = 'Density'
 
-        d_per_home = avg_dist(self.geoms.loc[self.hs_permanent_home.index])
-        d_per_work = avg_dist(self.geoms.loc[self.hs_permanent_work.index])
-        self.comp_coef_home = d_per_home / self.sqrt_area
-        self.comp_coef_work = d_per_work / self.sqrt_area
+        # index: compacity
+        hs_pair_d_avg = avg_dist(target_hs)  # distance among hotspots
+        comp_coef = compacity_coefficient(hs_pair_d_avg, self.sqrt_area)
+
+        # ----------------
+        # rasterize hot spots
+        if self.verbose: print(f'raster {len(target_hs)} hot spots with resolution: {self.raster_resolution}m', end='')
+        # TODO: no idea on how to choose area_pcnt_thres. Clipping the grids won't fit the MI raster equation.
+        #  Not Clipping will bring much extra area
+        raster_rper = gis.gp_polys_to_grids(target_hs, pname=target_hs.index.name, side=self.raster_resolution,
+                                            no_grid_by_area=True, clip_by_poly=False, area_pcnt_thres=0.2)
+        raster_rper.crs = target_hs.crs
+        raster_rper = raster_rper.merge(hs_density.reset_index())
+        raster_rper['Area'] = raster_rper.area
+        raster_rper['Mass'] = raster_rper.Area * raster_rper.Density
+        if self.verbose: print('into ', len(raster_rper), 'grids')
+
+        # area centroid and mass centroid
+        # TODO: there are some overlapping polygons:
+        #  rural agebs with point locations are buffered into circles.
+        #  These circles overlap. Causing the following areal centroid isn't equal to cascasd_union.centroid
+        rx = raster_rper.centroid.apply(lambda x: x.coords[0][0])
+        ry = raster_rper.centroid.apply(lambda x: x.coords[0][1])
+        cx = (rx * raster_rper.area).sum() / raster_rper.area.sum()
+        cy = (ry * raster_rper.area).sum() / raster_rper.area.sum()
+        raster_centroid = (cx, cy)
+        cx = (rx * raster_rper.Mass).sum() / raster_rper.Mass.sum()
+        cy = (ry * raster_rper.Mass).sum() / raster_rper.Mass.sum()
+        raster_mass_centroid = (cx, cy)
+        raster_rper_centroids = raster_rper.centroid.apply(lambda x: x.coords[0]).tolist()
+
+        # rasterize pairwise and to centroid distance
+        pairwise_dist_square_avg = avg_dist_square(raster_rper)
+        d2centroid = cdist(raster_rper_centroids, [raster_centroid])[:, 0]
+        d2centroid_avg = d2centroid.mean()
+        d2mass_centroid = cdist(raster_rper_centroids, [raster_mass_centroid])[:, 0]
+        # ----------------
+
+        # hotspots equivalent circle
+        ref_circle_radius = np.sqrt(raster_rper.Area.sum() / np.pi)
+
+        # indexes
+        coh = cohesion(ref_circle_radius, pairwise_dist_square_avg)
+        prox = proximity(ref_circle_radius, d2centroid_avg)
+
+        nmi = moment_inertia(raster_rper.Area, d2centroid)
+        nmmi = mass_moment_inertia(raster_rper, d2mass_centroid)
+
+        return {'pair_d_avg': hs_pair_d_avg, 'comp_coef': comp_coef,
+                'cohesion': coh, 'proximity': prox, 'NMI': nmi, 'NMMI': nmmi}
+
+    def _hs_all_compactness(self):
+        if self.verbose: print('computing compactness indexes for all day')
+        hs_index = self.hs_permanent.index
+        hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+        self.compact_index_all_day = self._calc_compactness(hs_index, hs_count)
+
+        if self.verbose: print('computing compactness indexes for Home time')
+        hs_index = self.hs_permanent_work.index
+        hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+        self.compact_index_work = self._calc_compactness(hs_index, hs_count)
+
+        if self.verbose: print('computing compactness indexes for work time')
+        hs_index = self.hs_permanent_home.index
+        hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+        self.compact_index_home = self._calc_compactness(hs_index, hs_count)
+
+        if self.verbose: print('computing compactness indexes for hourly')
+        compact_index_hourly = []
+        for hour in self.hs_avg:
+            hs_count_hourly = self.hs_avg[hour]
+            hs_count_hourly = hs_count_hourly[hs_count_hourly != 0]
+            c_index = self._calc_compactness(hs_count_hourly.index, hs_count_hourly)
+            compact_index_hourly.append(c_index)
+        self.compact_index_hourly = compact_index_hourly
