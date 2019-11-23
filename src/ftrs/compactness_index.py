@@ -1,6 +1,5 @@
 import numpy as np
-import numba as nb
-
+from numba import njit
 
 def compacity_coefficient(pairwise_distance_average, sqrt_area):
     return pairwise_distance_average / sqrt_area
@@ -40,7 +39,7 @@ def get_sum_min_pij_aij(raster_rper, aiaj):
     return sum_min_pij_aij
 
 
-@numba.njit
+@njit
 def compute_sum_2_min_pipj_aiaj(density_arr, aiaj):
     length = len(density_arr)
     s = 0
@@ -51,7 +50,7 @@ def compute_sum_2_min_pipj_aiaj(density_arr, aiaj):
     return s
 
 
-@numba.njit
+@njit
 def compute_sum_2_min_pipj_aiaj_with_area_arr(density_arr, area_arr):
     length = len(density_arr)
     s = 0
