@@ -1,3 +1,6 @@
+import sys
+
+sys.path.insert(0, '/home/Jiahui/mob2crime')
 import src.tower_interpolation as tw_int
 import src.ftrs.hotspot as ftr_hs
 import src.mex.regions2010 as region
@@ -8,7 +11,7 @@ import pandas as pd
 import datetime as dt
 
 PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
-URB_ONLY_DISPLAY = lambda x: 'UrbanOnly' if x else 'UrbanRural'
+URB_ONLY_DISPLAY = lambda x: 'Urban' if x else 'UrbanRural'
 ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
 zms_sort_cols = ['Area', 'Area_urb', 'Area_rur', 'Area_urb_pcnt', 'Area_rur_pcnt', 'pobtot', 'pob_urb', 'pob_rur',
@@ -128,52 +131,59 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
     return dv_a, dv_g, dv_idw
 
 
-def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, zms, zms_agebs, zms_grids, mg_mappings, hotspot_type='loubar'):
+def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, zms, zms_agebs, zms_grids, mg_mappings, hs_type='loubar'):
     # compute hot stats
-    hotspot_type = 'loubar'
-    n_hs_a = {}
-    comp_coef_a = {}
+    hs_stats_ageb = {}
     for by in ['area', 'pop']:
         for per_mun in [False, True]:
             for urb_only in [False, True]:
                 key = (by, per_mun, urb_only)
                 print(key, end=' ')
-                n, cc = ftr_hs.hs_stats_ageb(
-                    avg_a[by], zms, zms_agebs, mg_mappings, per_mun, urb_only, hotspot_type)
-                n_hs_a[key] = n
-                comp_coef_a[key] = cc
+                stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only, hs_type)
+                hs_stats_ageb[key] = stats
 
-    n_hs_g = {}
-    comp_coef_g = {}
+    hs_stats_g = {}
     for key, avg in avg_g.items():
         print(key, end=' ')
         by, per_mun, urb_only = key
         zms_g = zms_grids[(per_mun, urb_only)]
         # TODO: is it no need to pass on urb_only to has_stats_grid?
-        n, cc = ftr_hs.hs_stats_grid(
-            avg, zms, zms_g, per_mun, hotspot_type)
-        n_hs_g[key] = n
-        comp_coef_g[key] = cc
+        stats = ftr_hs.hs_stats_grid(avg, zms, zms_g, by, per_mun, urb_only, hs_type)
+        hs_stats_g[key] = stats
 
-    n_hs_idw = {}
-    comp_coef_idw = {}
+    hs_stats_idw = {}
     for key, avg in avg_idw.items():
         print(key, end=' ')
         per_mun, urb_only = key
+        by = 'idw'
         zms_g = zms_grids[key]
         # TODO: is it no need to pass on urb_only to has_stats_grid?
-        n, cc = ftr_hs.hs_stats_grid(
-            avg, zms, zms_g, per_mun, hotspot_type)
-        n_hs_idw[key] = n
-        comp_coef_idw[key] = cc
+        stats = ftr_hs.hs_stats_grid(avg, zms, zms_g, by, per_mun, urb_only, hs_type)
+        hs_stats_idw[key] = stats
 
-    n_hs_tw = {}
-    comp_coef_tw = {}
+    hs_stats_tw = {}
     for per_mun in [False, True]:
         for urb_only in [False, True]:
             key = (per_mun, urb_only)
             print(key, end=' ')
-            n, cc = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hotspot_type)
-            n_hs_tw[key] = n
-            comp_coef_tw[key] = cc
-    return
+            stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hs_type)
+            hs_stats_tw[key] = stats
+    return hs_stats_ageb, hs_stats_g, hs_stats_idw, hs_stats_tw
+
+
+if __name__ == "__main__":
+    import os
+
+    print(os.getcwd())
+    zms, zms_agebs, zms_tvor, zms_grids, mg_mappings = load_geoms()
+    avg_tw, avg_a, avg_g, avg_idw = interpolation(zms_grids)
+
+    # compute hot stats
+    hotspot_type = 'loubar'
+    for by in ['area', 'pop']:
+        for per_mun in [False, True]:
+            for urb_only in [False, True]:
+                key = (by, per_mun, urb_only)
+                print(key, end=' ')
+                hs_stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings,
+                                                by, per_mun, urb_only, hotspot_type, verbose=0)
