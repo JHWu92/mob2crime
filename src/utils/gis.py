@@ -1,8 +1,22 @@
+from numba import njit
 import fiona
 import geopandas as gp
 import numpy as np
+import pandas as pd
+import rasterio
+import rasterio.features
+import rasterio.transform
 from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, box, LineString
+from shapely.geometry import Polygon, box, LineString, Point
+
+
+def centroid2grid(centroid, side):
+    x, y = centroid
+    minx = x - side / 2
+    maxx = x + side / 2
+    miny = y - side / 2
+    maxy = y + side / 2
+    return box(minx, miny, maxx, maxy)
 
 
 def crs_normalization(crs):
@@ -243,9 +257,10 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
 def poly_bbox(poly):
     """
 
-    :param poly: poly can be a 4-element tuple representing the
-                 bounding box: lon_min, lat_min, lon_max, lat_max,
-                 or a closed LineString representing the outer ring
+    :param poly: poly can be
+        a 4-element tuple representing the bounding box: lon_min, lat_min, lon_max, lat_max,
+        or a closed LineString representing the outer ring
+        or a polygon
     :return: Polygon, lon_min, lat_min, lon_max, lat_max
     """
     if isinstance(poly, tuple):
@@ -301,10 +316,10 @@ def poly2grids(poly, side, clip_by_poly=True, no_grid_by_area=False, area_pcnt_t
             if not g.intersects(poly): continue
 
             # if will be faster to run g.within first before doing the intersection
-            if (clip_by_poly or area_pcnt_thres >0) and not g.within(poly):
-                g_clip  = g.intersection(poly)
+            if (clip_by_poly or area_pcnt_thres > 0) and not g.within(poly):
+                g_clip = g.intersection(poly)
                 # if smaller than threshold, don't add to list
-                if g_clip.area < side**2 * area_pcnt_thres: continue
+                if g_clip.area < side ** 2 * area_pcnt_thres: continue
                 if clip_by_poly:
                     g = g_clip
             grids.append(g)
@@ -361,6 +376,47 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
     return grids
 
 
+def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
+    bbox = p.bounds
+
+    diff_x = bbox[2] - bbox[0]
+    diff_y = bbox[3] - bbox[1]
+
+    nx = np.ceil(diff_x / side).astype(int)
+    ny = np.ceil(diff_y / side).astype(int)
+    new_bbox = (bbox[0], bbox[1], bbox[0] + nx * side, bbox[1] + ny * side)
+
+    trans = rasterio.transform.from_bounds(*new_bbox, nx, ny)
+    r = rasterio.features.rasterize([p], out_shape=(ny, nx), transform=trans)
+
+    rows = np.column_stack(np.where(r == 1))[:, 0]
+    cols = np.column_stack(np.where(r == 1))[:, 1]
+    cx, cy = rasterio.transform.xy(trans, rows, cols)
+    if return_xy: return cx, cy
+    if return_ij: return [{'row': rows[i], 'col': cols[i], 'geometry': Point(cx[i], cy[i])} for i in range(len(rows))]
+    return tuple(zip(cx, cy))
+
+
+def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
+    """
+    Assuming geopandas is already in equi-distant CRS
+    :param gp_polys: shapes
+    :param side: the resolution of rasterization
+    :param pname: column name for the index in gp_polys
+    :return: pd.DataFrame, columns=[row, col, centroid, pname]
+    """
+    centroids = []
+    for i, row in gp_polys.iterrows():
+        cs = poly2raster_centroid(row.geometry, side, return_xy=False, return_ij=True)
+        cs = pd.DataFrame(cs)
+        cs[pname] = i
+        centroids.append(cs)
+    centroids = pd.concat(centroids)
+    centroids = gp.GeoDataFrame(centroids)
+    centroids.crs = gp_polys.crs
+    return centroids
+
+
 def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None, largest_len=40000):
     from scipy.spatial.distance import cdist
 
@@ -377,3 +433,16 @@ def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None, largest_len=4000
     centroids = centroids.to_crs(dist_crs).apply(lambda x: x.coords[0]).tolist()
     d = cdist(centroids, centroids)
     return d
+
+
+@njit
+def pairwise_dist_average(vec, square=True):
+    n = len(vec)
+    s = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            dist = (vec[i, 0] - vec[j, 0]) ** 2 + (vec[i, 1] - vec[j, 1]) ** 2
+            if not square:
+                dist = np.sqrt(dist)
+            s += dist
+    return s / (n * (n - 1) / 2)
