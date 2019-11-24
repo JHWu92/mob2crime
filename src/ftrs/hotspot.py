@@ -1,3 +1,6 @@
+import json
+import os
+
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
@@ -9,6 +12,11 @@ from src.utils import loubar_thres
 
 HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']  # 10pm - 7am
 WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']  # 9am - 6pm
+MEASURES_DIR = 'data/mex_hotspot_measures'
+
+PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
+URB_ONLY_DISPLAY = lambda x: 'Urban' if x else 'UrbanRural'
+ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
 
 def keep_hotspot(avg, hotspot_type='loubar'):
@@ -57,23 +65,18 @@ def pair_dist_matrix(geoms):
     if len(geoms) <= 1:
         return 0
     if len(geoms) > 40000:
-        print(':::WARNING:::, too many grids, aborted')
-        return np.nan
+        raise ValueError('pair_dist_matrix:::WARNING:::, too many grids, aborted')
     pair_dist = gis.polys_centroid_pairwise_dist(geoms, dist_crs=geoms.crs)
     return pair_dist
 
 
-def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar'):
+def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
     import src.mex.tower as tower
     tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
     t_pts = tower.pts().set_index('gtid')
 
-    n_hs_average = {}
-    n_hs_hourly = {}
-    compactness_all_day = {}
-    compactness_home = {}
-    compactness_work = {}
-    compactness_hourly = {}
+    n_hs = {}
+    compactness = {}
     print('working on', end=' ')
     for sun, zm_mapping in tXzms.groupby('CVE_SUN'):
         print(sun, end=' ')
@@ -81,7 +84,8 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
         zm = zms.loc[sun]
         zm_t = t_pts.loc[zm_mapping.gtid].copy()
         zm_avg_t = avg_tw.reindex(zm_mapping.gtid, fill_value=0).copy()
-        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type)
+        fn_pref = f'{MEASURES_DIR}/tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
         hs_avg = None
 
         if per_mun:
@@ -110,27 +114,19 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
                 hs_avg = pd.DataFrame([], index=zm_avg_t.index, columns=zm_avg_t.columns).fillna(0)
 
         hs.calc_stats(hs_avg)
-        n_hs_average[sun] = hs.n_hs_average
-        n_hs_hourly[sun] = hs.n_hs_hourly
-        compactness_all_day[sun] = hs.compact_index_all_day
-        compactness_home[sun] = hs.compact_index_home
-        compactness_work[sun] = hs.compact_index_work
-        compactness_hourly[sun] = hs.compact_index_hourly
+        n_hs[sun] = hs.n_hs
+        compactness[sun] = hs.compactness
     print()
-    return {'n_hs_average': n_hs_average, 'n_hs_hourly': n_hs_hourly,
-            'compactness_all_day': compactness_all_day, 'compactness_home': compactness_home,
-            'compactness_work': compactness_work, 'compactness_hourly': compactness_hourly}
+    return {'n_hs': n_hs, 'compactness': compactness}
 
 
-def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
-    n_hs_average = {}
-    n_hs_hourly = {}
-    compactness_all_day = {}
-    compactness_home = {}
-    compactness_work = {}
-    compactness_hourly = {}
+def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
+                  by='area', per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
+    n_hs = {}
+    compactness = {}
     print('working on', end=' ')
     for sun, zm_mapping in mg_mapping.groupby('CVE_SUN'):
+        if verbose: print('=' * 10, end=' ')
         print(sun, end=' ')
         if urb_only:
             zm_mapping = zm_mapping[zm_mapping.Type == 'Urban']
@@ -138,7 +134,8 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
         zm_a = zms_agebs.loc[zm_mapping.ageb_id].copy()
         zm_avg_a = avg_a.loc[zm_a.index].copy()
 
-        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose)
+        fn_pref = f'{MEASURES_DIR}/ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -154,32 +151,23 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping, per_mun=False, urb_only=Fal
             hs_avg = pd.concat(hs_avg).reindex(zm_a.index, fill_value=0)
 
         hs.calc_stats(hs_avg)
-        n_hs_average[sun] = hs.n_hs_average
-        n_hs_hourly[sun] = hs.n_hs_hourly
-        compactness_all_day[sun] = hs.compact_index_all_day
-        compactness_home[sun] = hs.compact_index_home
-        compactness_work[sun] = hs.compact_index_work
-        compactness_hourly[sun] = hs.compact_index_hourly
+        n_hs[sun] = hs.n_hs
+        compactness[sun] = hs.compactness
     print()
-    return {'n_hs_average': n_hs_average, 'n_hs_hourly': n_hs_hourly,
-            'compactness_all_day': compactness_all_day, 'compactness_home': compactness_home,
-            'compactness_work': compactness_work, 'compactness_hourly': compactness_hourly}
+    return {'n_hs': n_hs, 'compactness': compactness}
 
 
-def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
-    n_hs_average = {}
-    n_hs_hourly = {}
-    compactness_all_day = {}
-    compactness_home = {}
-    compactness_work = {}
-    compactness_hourly = {}
+def hs_stats_grid(avg_g, zms, zms_grids, by='area', per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
+    n_hs = {}
+    compactness = {}
     print('working on', end=' ')
     for sun in sorted(zms.index):
         print(sun, end=' ')
         zm = zms.loc[sun]
         zm_g = zms_grids[zms_grids.CVE_SUN == sun].copy()
         zm_avg_g = avg_g.reindex(zm_g.index, fill_value=0).copy()
-        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type)
+        fn_pref = f'{MEASURES_DIR}/grid_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -196,20 +184,14 @@ def hs_stats_grid(avg_g, zms, zms_grids, per_mun=False, hotspot_type='loubar'):
             hs_avg = pd.concat(hs_avg).reindex(zm_g.index, fill_value=0)
 
         hs.calc_stats(hs_avg)
-        n_hs_average[sun] = hs.n_hs_average
-        n_hs_hourly[sun] = hs.n_hs_hourly
-        compactness_all_day[sun] = hs.compact_index_all_day
-        compactness_home[sun] = hs.compact_index_home
-        compactness_work[sun] = hs.compact_index_work
-        compactness_hourly[sun] = hs.compact_index_hourly
+        n_hs[sun] = hs.n_hs
+        compactness[sun] = hs.compactness
     print()
-    return {'n_hs_average': n_hs_average, 'n_hs_hourly': n_hs_hourly,
-            'compactness_all_day': compactness_all_day, 'compactness_home': compactness_home,
-            'compactness_work': compactness_work, 'compactness_hourly': compactness_hourly}
+    return {'n_hs': n_hs, 'compactness': compactness}
 
 
 class HotSpot:
-    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0):
+    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0, fn_pref=None):
         self.sqrt_area = np.sqrt(cover_region.Area)
         self.avg = avg.copy()
         self.geoms = geoms
@@ -217,6 +199,7 @@ class HotSpot:
         self.hotspot_type = hotspot_type
         self.raster_resolution = raster_resolution
         self.verbose = verbose
+        self.fn_pref = fn_pref
 
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
@@ -233,8 +216,9 @@ class HotSpot:
 
     def _number_of_hs(self):
         if self.verbose: print('computing number of hot spot per hour')
-        self.n_hs_hourly = (self.hs_avg != 0).sum(axis=0)
-        self.n_hs_average = self.n_hs_hourly.mean()
+        n_hs_hourly = (self.hs_avg != 0).sum(axis=0)
+        n_hs_average = n_hs_hourly.mean()
+        self.n_hs = {'average': n_hs_average, 'hourly': n_hs_hourly}
 
     def _hs_type_by_persistence(self):
         if self.verbose: print('computing persistency and obtaining permanent hot spots')
@@ -274,13 +258,18 @@ class HotSpot:
         # TODO: no idea on how to choose area_pcnt_thres. Clipping the grids won't fit the MI raster equation.
         #  Not Clipping will bring much extra area.
         #  Rastering first is very time consuming. But I am not sure about the vector form formula
-        raster_rper = gis.gp_polys_to_grids(target_hs, pname=target_hs.index.name, side=self.raster_resolution,
-                                            no_grid_by_area=True, clip_by_poly=False, area_pcnt_thres=0.2)
-        raster_rper.crs = target_hs.crs
+        # raster_rper = gis.gp_polys_to_grids(target_hs, pname=target_hs.index.name, side=self.raster_resolution,
+        #                                     no_grid_by_area=True, clip_by_poly=False, area_pcnt_thres=0.2)
+        # raster_rper.crs = target_hs.crs
+        # raster_rper = raster_rper.merge(hs_density.reset_index())
+        # raster_rper['Area'] = raster_rper.area
+        # raster_rper['Mass'] = raster_rper.Area * raster_rper.Density
+        raster_rper = gis.gp_polys_to_raster_centroids(target_hs, side=self.raster_resolution,
+                                                       pname=target_hs.index.name)
         raster_rper = raster_rper.merge(hs_density.reset_index())
-        raster_rper['Area'] = raster_rper.area
+        raster_rper['Area'] = self.raster_resolution ** 2
         raster_rper['Mass'] = raster_rper.Area * raster_rper.Density
-        if self.verbose: print('into ', len(raster_rper), 'grids')
+        if self.verbose: print(' into ', len(raster_rper), 'grids')
 
         # area centroid and mass centroid
         # TODO: there are some overlapping polygons:
@@ -288,16 +277,17 @@ class HotSpot:
         #  These circles overlap. Causing the following areal centroid isn't equal to cascasd_union.centroid
         rx = raster_rper.centroid.apply(lambda x: x.coords[0][0])
         ry = raster_rper.centroid.apply(lambda x: x.coords[0][1])
-        cx = (rx * raster_rper.area).sum() / raster_rper.area.sum()
-        cy = (ry * raster_rper.area).sum() / raster_rper.area.sum()
+        cx = (rx * raster_rper.Area).sum() / raster_rper.Area.sum()
+        cy = (ry * raster_rper.Area).sum() / raster_rper.Area.sum()
         raster_centroid = (cx, cy)
         cx = (rx * raster_rper.Mass).sum() / raster_rper.Mass.sum()
         cy = (ry * raster_rper.Mass).sum() / raster_rper.Mass.sum()
         raster_mass_centroid = (cx, cy)
         raster_rper_centroids = raster_rper.centroid.apply(lambda x: x.coords[0]).tolist()
-
+        # if self.verbose: print(f'raster_centroid: {raster_centroid}, raster_mass_centroids: {raster_mass_centroid}')
         # rasterize pairwise and to centroid distance
-        pairwise_dist_square_avg = avg_dist_square(raster_rper)
+        # pairwise_dist_square_avg = avg_dist_square(raster_rper)
+        pairwise_dist_square_avg = gis.pairwise_dist_average(np.array(raster_rper_centroids))
         d2centroid = cdist(raster_rper_centroids, [raster_centroid])[:, 0]
         d2centroid_avg = d2centroid.mean()
         d2mass_centroid = cdist(raster_rper_centroids, [raster_mass_centroid])[:, 0]
@@ -315,20 +305,27 @@ class HotSpot:
         return {'comp_coef': comp_coef, 'cohesion': coh, 'proximity': prox, 'NMI': nmi, 'NMMI': nmmi}
 
     def _hs_all_compactness(self):
+        compactness_fn = f'{self.fn_pref}_compactness.json'
+        if os.path.exists(compactness_fn):
+            if self.verbose: print('loading existing compactness at', compactness_fn)
+            with open(compactness_fn, 'r') as f:
+                self.compactness = json.load(f)
+            return
+
         if self.verbose: print('computing compactness indexes for all day')
         hs_index = self.hs_permanent.index
         hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
-        self.compact_index_all_day = self._calc_compactness(hs_index, hs_count)
+        compact_index_all_day = self._calc_compactness(hs_index, hs_count)
 
         if self.verbose: print('computing compactness indexes for Home time')
         hs_index = self.hs_permanent_work.index
         hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
-        self.compact_index_work = self._calc_compactness(hs_index, hs_count)
+        compact_index_work = self._calc_compactness(hs_index, hs_count)
 
         if self.verbose: print('computing compactness indexes for work time')
         hs_index = self.hs_permanent_home.index
         hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
-        self.compact_index_home = self._calc_compactness(hs_index, hs_count)
+        compact_index_home = self._calc_compactness(hs_index, hs_count)
 
         if self.verbose: print('computing compactness indexes for hourly')
         compact_index_hourly = []
@@ -336,5 +333,12 @@ class HotSpot:
             hs_count_hourly = self.hs_avg[hour]
             hs_count_hourly = hs_count_hourly[hs_count_hourly != 0]
             c_index = self._calc_compactness(hs_count_hourly.index, hs_count_hourly)
+            c_index['hour'] = hour
             compact_index_hourly.append(c_index)
-        self.compact_index_hourly = compact_index_hourly
+        compact_index_hourly = compact_index_hourly
+
+        self.compactness = {'all_day': compact_index_all_day, 'home_time': compact_index_home,
+                            'work_time': compact_index_work, 'hourly': compact_index_hourly}
+
+        with open(compactness_fn, 'w') as f:
+            json.dump(self.compactness, f)
