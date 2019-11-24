@@ -1,6 +1,7 @@
 import numpy as np
 from numba import njit
 
+
 def compacity_coefficient(pairwise_distance_average, sqrt_area):
     return pairwise_distance_average / sqrt_area
 
@@ -60,7 +61,6 @@ def compute_sum_2_min_pipj_aiaj_with_area_arr(density_arr, area_arr):
         for j in range(i + 1, length):
             s += 2 * min(pi, density_arr[j]) * ai * area_arr[j]
     return s
-
 
 
 def mass_moment_inertia(raster_rper, d2mass_centroid):
