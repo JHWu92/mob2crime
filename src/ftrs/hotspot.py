@@ -157,16 +157,19 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
     return {'n_hs': n_hs, 'compactness': compactness}
 
 
-def hs_stats_grid(avg_g, zms, zms_grids, by='area', per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
+def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', per_mun=False, urb_only=False,
+                         hotspot_type='loubar', verbose=0):
+    """grid and vor has the same formats"""
+    assert geom_type in ('grid', 'vor')
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
     for sun in sorted(zms.index):
         print(sun, end=' ')
         zm = zms.loc[sun]
-        zm_g = zms_grids[zms_grids.CVE_SUN == sun].copy()
-        zm_avg_g = avg_g.reindex(zm_g.index, fill_value=0).copy()
-        fn_pref = f'{MEASURES_DIR}/grid_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        zm_g = zms_geoms[zms_geoms.CVE_SUN == sun].copy()
+        zm_avg_g = avg_geom.reindex(zm_g.index, fill_value=0).copy()
+        fn_pref = f'{MEASURES_DIR}/{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
         hs_avg = None
 
@@ -174,7 +177,7 @@ def hs_stats_grid(avg_g, zms, zms_grids, by='area', per_mun=False, urb_only=Fals
         if per_mun:
             hs_avg = []
             for _, mun_g in zm_g.groupby('mun_id'):
-                mun_avg_g = avg_g.reindex(mun_g.index, fill_value=0).copy()
+                mun_avg_g = avg_geom.reindex(mun_g.index, fill_value=0).copy()
                 # print(sun, mun_g.mun_id.iloc[0],'mun g not in avg', set(mun_g.index) - set(avg_g.index))
                 # print('mun_avg_g isnull', mun_avg_g.isnull().sum(), mun_avg_g.shape)
                 if len(mun_g) < 10:
@@ -306,7 +309,7 @@ class HotSpot:
 
     def _hs_all_compactness(self):
         compactness_fn = f'{self.fn_pref}_compactness.json'
-        if os.path.exists(compactness_fn):
+        if self.fn_pref and os.path.exists(compactness_fn):
             if self.verbose: print('loading existing compactness at', compactness_fn)
             with open(compactness_fn, 'r') as f:
                 self.compactness = json.load(f)
@@ -339,6 +342,6 @@ class HotSpot:
 
         self.compactness = {'all_day': compact_index_all_day, 'home_time': compact_index_home,
                             'work_time': compact_index_work, 'hourly': compact_index_hourly}
-
-        with open(compactness_fn, 'w') as f:
-            json.dump(self.compactness, f)
+        if self.fn_pref:
+            with open(compactness_fn, 'w') as f:
+                json.dump(self.compactness, f)
