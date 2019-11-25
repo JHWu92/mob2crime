@@ -49,7 +49,7 @@ def country(to_4326=False):
     return ctry
 
 
-def municipalities(mun_ids=None, to_4326=False,load_pop=False):
+def municipalities(mun_ids=None, to_4326=False, load_pop=False):
     mgm = gp.read_file(f'{DIR_CenGeo}/national_macro/mgm2010v5_0/municipios.shp')
     mgm['mun_id'] = mgm.CVE_ENT + mgm.CVE_MUN
     mgm = filter_mun_ids(mgm, mun_ids)
@@ -316,7 +316,7 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
         print('loading existing file', path)
         grids = gp.read_file(f'gzip://{path}')
         grids = grids.set_index('id')
-        grids.index.name='grid'
+        grids.index.name = 'grid'
         return grids
 
     print('=====computing mpa_grids')
@@ -358,6 +358,7 @@ def mpa_grids(side, per_mun=False, urb_only=False, to_4326=False):
             grids = grids.to_crs(epsg=4326)
 
     return grids
+
 
 def mpa_vors(per_mun=False, urb_only=False, to_4326=False):
     import src.mex.tower as tower
