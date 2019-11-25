@@ -1,3 +1,4 @@
+import datetime
 import sys
 
 sys.path.insert(0, '/home/Jiahui/mob2crime')
@@ -72,10 +73,16 @@ def load_geoms():
         for urb_only in [False, True]:
             print('=' * 20, 'loading grids', per_mun, urb_only, dt.datetime.now())
             zms_grids[(per_mun, urb_only)] = region.mpa_grids(G_side, per_mun, urb_only)
-    return zms, zms_agebs, zms_tvor, zms_grids, mg_mappings
+
+    zms_sub_vors = {}
+    for per_mun in [False, True]:
+        for urb_only in [False, True]:
+            #         print('=' * 20, 'loading grids', per_mun, urb_only, dt.datetime.now())
+            zms_sub_vors[(per_mun, urb_only)] = region.mpa_vors(per_mun, urb_only)
+    return zms, zms_agebs, zms_tvor, zms_grids, zms_sub_vors, mg_mappings
 
 
-def interpolation(zms_grids):
+def interpolation(zms_grids, zms_sub_vors):
     call_direction = 'out+in'
     aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction)
     avg_tw = pd.DataFrame(aver['wd']).T
@@ -102,7 +109,16 @@ def interpolation(zms_grids):
             avg_idw[(per_mun, urb_only)] = tw_int.interpolate_idw(avg_tw, G_side, per_mun=per_mun, urb_only=urb_only,
                                                                   max_k=10, grids=grids)
 
-    return avg_tw, avg_a, avg_g, avg_idw
+    avg_vor = {}
+    for by in ['area', 'pop']:
+        for per_mun in [False, True]:
+            for urb_only in [False, True]:
+                sub_vors = zms_sub_vors[(per_mun, urb_only)]
+                t2v = tw_int.to_mpa_vors(by=by, per_mun=per_mun, urb_only=urb_only, zms_vors=sub_vors)
+                t2v.set_index('vor', inplace=True)
+                avg_vor[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2v)
+
+    return avg_tw, avg_a, avg_g, avg_idw, avg_vor
 
 
 def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
@@ -131,59 +147,73 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
     return dv_a, dv_g, dv_idw
 
 
-def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, zms, zms_agebs, zms_grids, mg_mappings, hs_type='loubar'):
+def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
+                          zms, zms_agebs, zms_grids, zms_sub_vors,
+                          mg_mappings, hs_type='loubar', loading=()):
     # compute hot stats
     hs_stats_ageb = {}
-    for by in ['area', 'pop']:
-        for per_mun in [False, True]:
-            for urb_only in [False, True]:
-                key = (by, per_mun, urb_only)
-                print(key, end=' ')
-                stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only, hs_type)
-                hs_stats_ageb[key] = stats
+    if 'ageb' in loading:
+        for by in ['area', 'pop']:
+            for per_mun in [False, True]:
+                for urb_only in [False, True]:
+                    key = (by, per_mun, urb_only)
+                    print(key, end=' ')
+                    stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only, hs_type)
+                    hs_stats_ageb[key] = stats
+        print(datetime.datetime.now())
 
     hs_stats_g = {}
-    for key, avg in avg_g.items():
-        print(key, end=' ')
-        by, per_mun, urb_only = key
-        zms_g = zms_grids[(per_mun, urb_only)]
-        # TODO: is it no need to pass on urb_only to has_stats_grid?
-        stats = ftr_hs.hs_stats_grid(avg, zms, zms_g, by, per_mun, urb_only, hs_type)
-        hs_stats_g[key] = stats
+    if 'grid' in loading:
+        for key, avg in avg_g.items():
+            print(key, end=' ')
+            by, per_mun, urb_only = key
+            zms_g = zms_grids[(per_mun, urb_only)]
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only, hs_type)
+            hs_stats_g[key] = stats
+        print(datetime.datetime.now())
 
     hs_stats_idw = {}
-    for key, avg in avg_idw.items():
-        print(key, end=' ')
-        per_mun, urb_only = key
-        by = 'idw'
-        zms_g = zms_grids[key]
-        # TODO: is it no need to pass on urb_only to has_stats_grid?
-        stats = ftr_hs.hs_stats_grid(avg, zms, zms_g, by, per_mun, urb_only, hs_type)
-        hs_stats_idw[key] = stats
+    if 'idw' in loading:
+        for key, avg in avg_idw.items():
+            print(key, end=' ')
+            per_mun, urb_only = key
+            by = 'idw'
+            zms_g = zms_grids[key]
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only, hs_type)
+            hs_stats_idw[key] = stats
+        print(datetime.datetime.now())
+
+    hs_stats_vor = {}
+    if 'vor' in loading:
+        for key, avg in avg_vor.items():
+            print(key, end=' ')
+            by, per_mun, urb_only = key
+            zms_vor = zms_sub_vors[(per_mun, urb_only)]
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_vor, 'vor', by, per_mun, urb_only, hs_type)
+            hs_stats_vor[key] = stats
+        print(datetime.datetime.now())
 
     hs_stats_tw = {}
-    for per_mun in [False, True]:
-        for urb_only in [False, True]:
-            key = (per_mun, urb_only)
-            print(key, end=' ')
-            stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hs_type)
-            hs_stats_tw[key] = stats
-    return hs_stats_ageb, hs_stats_g, hs_stats_idw, hs_stats_tw
+    if 'tw' in loading:
+        for per_mun in [False, True]:
+            for urb_only in [False, True]:
+                key = (per_mun, urb_only)
+                print(key, end=' ')
+                stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hs_type)
+                hs_stats_tw[key] = stats
+    return hs_stats_ageb, hs_stats_g, hs_stats_idw, hs_stats_vor, hs_stats_tw
 
 
 if __name__ == "__main__":
     import os
 
     print(os.getcwd())
-    zms, zms_agebs, zms_tvor, zms_grids, mg_mappings = load_geoms()
-    avg_tw, avg_a, avg_g, avg_idw = interpolation(zms_grids)
+    print(datetime.datetime.now())
+    ZMS, ZMS_AGEBS, ZMS_TVOR, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS = load_geoms()
+    AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS)
+    print(datetime.datetime.now())
 
-    # compute hot stats
-    hotspot_type = 'loubar'
-    for by in ['area', 'pop']:
-        for per_mun in [False, True]:
-            for urb_only in [False, True]:
-                key = (by, per_mun, urb_only)
-                print(key, end=' ')
-                hs_stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings,
-                                                by, per_mun, urb_only, hotspot_type, verbose=0)
+    LOADING = ('vor',)
+    compute_hotspot_stats(AVG_A, AVG_G, AVG_IDW, AVG_TW, AVG_VOR, ZMS, ZMS_AGEBS, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS,
+                          loading=LOADING)
+    print(datetime.datetime.now())
