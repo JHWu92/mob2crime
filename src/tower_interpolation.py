@@ -223,7 +223,7 @@ def to_mpa_vors(by='area', per_mun=False, urb_only=False, zms_vors=None):
                        'txa_pop', 'tower_pop', 'txa2v_area', 'txa_area', 'geometry',
                        'pobtot', 'tower_area', 'vor_area', 'ageb_area']]
         t2v = txa2v.groupby(['tower', 'vor']).weight.sum().reset_index()
-        t2v= t2v[t2v.weight>1e-12]
+        t2v = t2v[t2v.weight > 1e-12]
         t2v[['tower', 'vor', 'weight']].to_csv(path)
 
     return t2v[['tower', 'vor', 'weight']]
