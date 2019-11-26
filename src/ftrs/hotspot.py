@@ -48,6 +48,9 @@ def _handle_geoms_pairdist_input(geoms=None, pair_dist=None):
 
 
 def avg_dist(geoms=None, pair_dist=None):
+    if len(geoms) == 1:
+        # only 1 geometry, distance is 0
+        return 0
     pair_dist = _handle_geoms_pairdist_input(geoms, pair_dist)
     n = len(pair_dist)
     # The pair_dist is not wrong: it is a n*n matrix, the diagonal is zeros, there are n*(n-1) pairs
@@ -180,10 +183,14 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', 
                 mun_avg_g = avg_geom.reindex(mun_g.index, fill_value=0).copy()
                 # print(sun, mun_g.mun_id.iloc[0],'mun g not in avg', set(mun_g.index) - set(avg_g.index))
                 # print('mun_avg_g isnull', mun_avg_g.isnull().sum(), mun_avg_g.shape)
-                if len(mun_g) < 10:
+                # TODO: I don't remember why set 10 for grid. 10 doesn't work for Vor, sun 15 always < 10 in PerMun True
+                if geom_type == 'grid' and len(mun_g) < 10:
+                    continue
+                if geom_type == 'vor' and len(mun_g) < 2:
                     continue
                 mun_hot = keep_hotspot(mun_avg_g, hotspot_type)
                 hs_avg.append(mun_hot)
+
             hs_avg = pd.concat(hs_avg).reindex(zm_g.index, fill_value=0)
 
         hs.calc_stats(hs_avg)
