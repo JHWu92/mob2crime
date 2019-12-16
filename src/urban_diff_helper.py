@@ -82,16 +82,18 @@ def load_geoms():
     return zms, zms_agebs, zms_tvor, zms_grids, zms_sub_vors, mg_mappings
 
 
-def interpolation(zms_grids, zms_sub_vors):
+def interpolation(zms_grids, zms_sub_vors, n_bins=24):
     call_direction = 'out+in'
-    aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction)
+
+    aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction, n_bins=n_bins)
     avg_tw = pd.DataFrame(aver['wd']).T
+    assert avg_tw.shape[1] == n_bins
 
     avg_a = {}
     for by in ['area', 'pop']:
         t2a = tw_int.to_mpa_agebs(by)
         t2a.set_index('ageb', inplace=True)
-        avg_a[by] = tw_int.interpolate_stats(avg_tw, t2a)
+        avg_a[by] = tw_int.interpolate_stats(avg_tw, t2a, n_bins=n_bins)
 
     avg_g = {}
     for by in ['area', 'pop']:
@@ -100,14 +102,14 @@ def interpolation(zms_grids, zms_sub_vors):
                 grids = zms_grids[(per_mun, urb_only)]
                 t2g = tw_int.to_mpa_grids(G_side, by=by, per_mun=per_mun, urb_only=urb_only, grids=grids)
                 t2g.set_index('grid', inplace=True)
-                avg_g[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2g)
+                avg_g[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2g, n_bins=n_bins)
 
     avg_idw = {}
     for per_mun in [False, True]:
         for urb_only in [False, True]:
             grids = zms_grids[(per_mun, urb_only)]
             avg_idw[(per_mun, urb_only)] = tw_int.interpolate_idw(avg_tw, G_side, per_mun=per_mun, urb_only=urb_only,
-                                                                  max_k=10, grids=grids)
+                                                                  max_k=10, grids=grids, n_bins=n_bins)
 
     avg_vor = {}
     for by in ['area', 'pop']:
@@ -116,7 +118,7 @@ def interpolation(zms_grids, zms_sub_vors):
                 sub_vors = zms_sub_vors[(per_mun, urb_only)]
                 t2v = tw_int.to_mpa_vors(by=by, per_mun=per_mun, urb_only=urb_only, zms_vors=sub_vors)
                 t2v.set_index('vor', inplace=True)
-                avg_vor[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2v)
+                avg_vor[(by, per_mun, urb_only)] = tw_int.interpolate_stats(avg_tw, t2v, n_bins=n_bins)
 
     return avg_tw, avg_a, avg_g, avg_idw, avg_vor
 
