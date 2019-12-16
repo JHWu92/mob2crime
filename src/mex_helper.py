@@ -20,17 +20,22 @@ REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans
                 'metropolitans_all', 'mpa_all_uba')
 
 
-def stat_tw_dow_aver_hr_uniq_user(call_direction='out'):
+def stat_tw_dow_aver_hr_uniq_user(call_direction='out', n_bins=24):
     """return average hourly nunique users for each tower on each day of week (dow, weekday or weekend)"""
-    path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}.pickle'
-
+    if n_bins == 24:
+        path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}.pickle'
+    elif n_bins == 48:
+        path = f'stats/stat_tw_dow_aver_half_hr_uniq_user-{call_direction}.pickle'
+    else:
+        raise ValueError(n_bins, 'not defined')
     if os.path.exists(path):
         print('loading cached tw average', path)
         average = pickle.load(open(path, 'rb'))
         return average
 
-    print('stats dir:', f'stats/MexTwHrUniqCnt-{call_direction}/')
-    fns = sorted(glob.glob(f'stats/MexTwHrUniqCnt-{call_direction}/*-located.csv'))
+    stat_dir = f'stats/MexTwHrUniqCnt-{call_direction}' if n_bins == 24 else f'stats/MexTwHalfHrUniqCnt-{call_direction}/'
+    print('stats dir:', stat_dir)
+    fns = sorted(glob.glob(f'{stat_dir}/*-located.csv'))
     if len(fns) == 0:
         print('no file is found')
     print('loading stats by weekday or weekend')
