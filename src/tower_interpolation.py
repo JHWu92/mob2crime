@@ -17,7 +17,7 @@ PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 
-def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None):
+def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None, n_bins=24):
     per_mun_str = PER_MUN_STR(per_mun)
     path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
 
@@ -41,7 +41,7 @@ def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids
     print('interpolating per hour')
     g_avg = {}
 
-    for h in range(24):
+    for h in range(n_bins):
         h = str(h)
         g_avg[h] = _interpolate_idw_per_hour(grids, tws, tws_x_zms, tw_avg[h], max_k)
     df = []
@@ -75,12 +75,12 @@ def _interpolate_idw_per_hour(grids, tws, tws_x_zms, z, max_k=10):
     return gs_avg
 
 
-def interpolate_stats(tw_avg, t2region):
+def interpolate_stats(tw_avg, t2region, n_bins=24):
     # there are grids without any call throughout the observation period
     #     print('grid_average')
     r_avg = t2region.merge(tw_avg, left_on='tower', right_index=True, how='left')
 
-    for h in range(24):
+    for h in range(n_bins):
         h = str(h)
         r_avg[h] = r_avg[h] * r_avg['weight']
 
