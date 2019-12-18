@@ -155,6 +155,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
     # compute hot stats
     hs_stats_ageb = {}
     if 'ageb' in loading:
+        print('='*20, 'ageb')
         for by in ['area', 'pop']:
             for per_mun in [False, True]:
                 for urb_only in [False, True]:
@@ -166,6 +167,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
 
     hs_stats_g = {}
     if 'grid' in loading:
+        print('='*20, 'grid')
         for key, avg in avg_g.items():
             print(key, end=' ')
             by, per_mun, urb_only = key
@@ -176,6 +178,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
 
     hs_stats_idw = {}
     if 'idw' in loading:
+        print('='*20, 'idw')
         for key, avg in avg_idw.items():
             print(key, end=' ')
             per_mun, urb_only = key
@@ -187,6 +190,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
 
     hs_stats_vor = {}
     if 'vor' in loading:
+        print('='*20, 'vor')
         for key, avg in avg_vor.items():
             print(key, end=' ')
             by, per_mun, urb_only = key
@@ -207,15 +211,23 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
 
 
 if __name__ == "__main__":
+    # run this first to cache time consuming intermediate results
     import os
 
     print(os.getcwd())
     print(datetime.datetime.now())
+    LOADING = ('ageb', 'grid', 'idw', 'vor',)
+    N_BINS = 48
+    print('loading', LOADING)
+    print('n bins:', N_BINS)
+
     ZMS, ZMS_AGEBS, ZMS_TVOR, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS = load_geoms()
-    AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS)
+
+    # cache avg_idw
+    AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS, N_BINS)
     print(datetime.datetime.now())
 
-    LOADING = ('vor',)
+    # TODO not sure what it caches
     compute_hotspot_stats(AVG_A, AVG_G, AVG_IDW, AVG_TW, AVG_VOR, ZMS, ZMS_AGEBS, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS,
                           loading=LOADING)
     print(datetime.datetime.now())

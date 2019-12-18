@@ -19,7 +19,10 @@ URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None, n_bins=24):
     per_mun_str = PER_MUN_STR(per_mun)
-    path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
+    if n_bins == 24:
+        path = f'{DIR_INTPL}/interpolate_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
+    else:
+        path = f'{DIR_INTPL}/interpolate{n_bins}_idw{max_k}_g{side}_{per_mun_str}_{urb_only}.csv.gz'
 
     if os.path.exists(path):
         print('interpolate_idw loading existing file', path)

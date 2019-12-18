@@ -10,8 +10,20 @@ from src.ftrs.compactness_index import compacity_coefficient, cohesion, proximit
     mass_moment_inertia
 from src.utils import loubar_thres
 
-HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']  # 10pm - 7am
-WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']  # 9am - 6pm
+# 0: 0~1 am
+# 6: 6~7 am
+# 9: 9~10 am
+# 17: 5~6 pm
+# 22: 22~23 (10~11pm)
+# 23: 23~24 (11~11:59pm)
+
+# 10pm - 7am
+HOME_HOURS = {24: ['0', '1', '2', '3', '4', '5', '6', '22', '23'],
+              48: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '44', '45', '46', '47']}
+# 9am - 6pm
+WORK_HOURS = {24: ['9', '10', '11', '12', '13', '14', '15', '16', '17'],
+              48: ['18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34',
+                   '35']}
 MEASURES_DIR = 'data/mex_hotspot_measures'
 
 PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
@@ -87,8 +99,9 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
         zm = zms.loc[sun]
         zm_t = t_pts.loc[zm_mapping.gtid].copy()
         zm_avg_t = avg_tw.reindex(zm_mapping.gtid, fill_value=0).copy()
-        fn_pref = f'{MEASURES_DIR}/tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
+
+        fn_pref = f'tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
         if per_mun:
@@ -137,8 +150,8 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
         zm_a = zms_agebs.loc[zm_mapping.ageb_id].copy()
         zm_avg_a = avg_a.loc[zm_a.index].copy()
 
-        fn_pref = f'{MEASURES_DIR}/ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
+        fn_pref = f'ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -172,8 +185,8 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', 
         zm = zms.loc[sun]
         zm_g = zms_geoms[zms_geoms.CVE_SUN == sun].copy()
         zm_avg_g = avg_geom.reindex(zm_g.index, fill_value=0).copy()
-        fn_pref = f'{MEASURES_DIR}/{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, fn_pref=fn_pref)
+        fn_pref = f'{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -201,7 +214,12 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', 
 
 
 class HotSpot:
-    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0, fn_pref=None):
+    def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0,
+                 directory=None, fn_pref=None):
+        """
+        :param directory: the directory to store data
+        :param fn_pref: the prefix str for the file name. If None, no data is cached
+        """
         self.sqrt_area = np.sqrt(cover_region.Area)
         self.avg = avg.copy()
         self.geoms = geoms
@@ -209,7 +227,14 @@ class HotSpot:
         self.hotspot_type = hotspot_type
         self.raster_resolution = raster_resolution
         self.verbose = verbose
-        self.fn_pref = fn_pref
+        self.n_bins = avg.shape[1]
+        if fn_pref:  # not None, not '', not 0, etc
+            paths = []
+            if directory: paths.append(directory)
+            if self.n_bins != 24: paths.append(f'tod{self.n_bins}')
+            paths.append(fn_pref)
+            fn_pref = '/'.join(paths)
+        self.fn_pref = fn_pref if fn_pref else None
 
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
@@ -232,17 +257,20 @@ class HotSpot:
 
     def _hs_type_by_persistence(self):
         if self.verbose: print('computing persistency and obtaining permanent hot spots')
-        persistence = (self.hs_avg != 0).sum(axis=1)
-        persistence_home = (self.hs_avg[HOME_HOURS] != 0).sum(axis=1)
-        persistence_work = (self.hs_avg[WORK_HOURS] != 0).sum(axis=1)
+        home_hours = HOME_HOURS[self.n_bins]
+        work_hours = WORK_HOURS[self.n_bins]
 
-        self.hs_permanent = persistence[persistence == 24]
+        persistence = (self.hs_avg != 0).sum(axis=1)
+        persistence_home = (self.hs_avg[home_hours] != 0).sum(axis=1)
+        persistence_work = (self.hs_avg[work_hours] != 0).sum(axis=1)
+
+        self.hs_permanent = persistence[persistence == self.n_bins]
         self.n_hs_per = len(self.hs_permanent)
 
-        self.hs_permanent_home = persistence_home[persistence_home == len(HOME_HOURS)]
+        self.hs_permanent_home = persistence_home[persistence_home == len(home_hours)]
         self.n_hs_per_home = len(self.hs_permanent_home)
 
-        self.hs_permanent_work = persistence_work[persistence_work == len(WORK_HOURS)]
+        self.hs_permanent_work = persistence_work[persistence_work == len(work_hours)]
         self.n_hs_per_work = len(self.hs_permanent_work)
 
         # self.hs_intermediate = persistence[(persistence < 24) & (persistence >= 7)]
@@ -316,6 +344,7 @@ class HotSpot:
 
     def _hs_all_compactness(self):
         compactness_fn = f'{self.fn_pref}_compactness.json'
+
         if self.fn_pref and os.path.exists(compactness_fn):
             if self.verbose: print('loading existing compactness at', compactness_fn)
             with open(compactness_fn, 'r') as f:
