@@ -375,6 +375,7 @@ def mpa_vors(per_mun=False, urb_only=False, to_4326=False):
     if to_4326:
         variant_vors = variant_vors.to_crs(epsg=4326)
 
+    # if tower is within zm, then column centroid is the tower location, otherwise the geometric centroid
     variant_vors['centroid'] = variant_vors.apply(
         lambda x: x.centroid if x.centroid is not None else x.geometry.centroid, axis=1)
 
