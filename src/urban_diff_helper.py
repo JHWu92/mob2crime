@@ -195,6 +195,7 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
             print(key, end=' ')
             by, per_mun, urb_only = key
             zms_vor = zms_sub_vors[(per_mun, urb_only)]
+            # the comp coef seems to be computed using geometric centroid, not tower location
             stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_vor, 'vor', by, per_mun, urb_only, hs_type)
             hs_stats_vor[key] = stats
         print(datetime.datetime.now())
