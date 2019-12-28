@@ -10,7 +10,14 @@ def geojson_per_row_color_col(gpdf, name, color='blue', tip_cols=None, some_map=
     """
     if color_col:
         from branca.colormap import linear
-        cmap = linear.Reds_09.scale()
+        cmap = {
+            'red': linear.Reds_09.scale(),
+            'blue': linear.Blues_09.scale(),
+            'green': linear.Greens_09.scale(),
+            'orange': linear.Oranges_09.scale(),
+            'purple': linear.Purples_09.scale(),
+            'grey': linear.Greys_09.scale(),
+        }[color]
         colors = gpdf[color_col].apply(cmap)
     else:
         colors = [color] * len(gpdf)
