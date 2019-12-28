@@ -217,9 +217,8 @@ if __name__ == "__main__":
 
     print(os.getcwd())
     print(datetime.datetime.now())
-    # LOADING = ('ageb', 'grid', 'idw', 'vor',)
-    LOADING = ('vor',)
-    N_BINS = 48
+    LOADING = ('ageb', 'grid', 'idw', 'vor',)
+    N_BINS = 4
     print('loading', LOADING)
     print('n bins:', N_BINS)
 
