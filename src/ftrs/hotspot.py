@@ -90,11 +90,12 @@ def pair_dist_matrix(geoms):
     return pair_dist
 
 
-def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
+def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=False, hotspot_type='loubar', verbose=0):
     import src.mex.tower as tower
     tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
     t_pts = tower.pts().set_index('gtid')
 
+    area_norm_str = 'density' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -105,7 +106,10 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
         zm_t = t_pts.loc[zm_mapping.gtid].copy()
         zm_avg_t = avg_tw.reindex(zm_mapping.gtid, fill_value=0).copy()
 
-        fn_pref = f'tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        if area_normalized:
+            zm_avg_t = zm_avg_t.apply(lambda x: x / (zm_t.area / 1000 ** 2))
+
+        fn_pref = f'{area_norm_str}tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
@@ -144,6 +148,7 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
                   by='area', per_mun=False, urb_only=False, area_normalized=False,
                   hotspot_type='loubar', verbose=0):
+    area_norm_str = 'density' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -155,8 +160,9 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
         zm = zms.loc[sun]
         zm_a = zms_agebs.loc[zm_mapping.ageb_id].copy()
         zm_avg_a = avg_a.loc[zm_a.index].copy()
-
-        fn_pref = f'ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        if area_normalized:
+            zm_avg_a = zm_avg_a.apply(lambda x: x / (zm_a.area / 1000 ** 2))
+        fn_pref = f'{area_norm_str}ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
@@ -179,10 +185,12 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
     return {'n_hs': n_hs, 'compactness': compactness}
 
 
-def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', per_mun=False, urb_only=False,
+def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
+                         per_mun=False, urb_only=False, area_normalized=False,
                          hotspot_type='loubar', verbose=0):
     """grid and vor has the same formats"""
     assert geom_type in ('grid', 'vor')
+    area_norm_str = 'density' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -191,7 +199,9 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area', 
         zm = zms.loc[sun]
         zm_g = zms_geoms[zms_geoms.CVE_SUN == sun].copy()
         zm_avg_g = avg_geom.reindex(zm_g.index, fill_value=0).copy()
-        fn_pref = f'{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
+        if area_normalized:
+            zm_avg_g = zm_avg_g.apply(lambda x: x / (zm_g.area / 1000 ** 2))
+        fn_pref = f'{area_norm_str}{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
         hs_avg = None
 
