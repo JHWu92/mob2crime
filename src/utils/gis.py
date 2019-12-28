@@ -1,4 +1,4 @@
-from numba import njit
+import warnings
 import fiona
 import geopandas as gp
 import numpy as np
@@ -6,6 +6,7 @@ import pandas as pd
 import rasterio
 import rasterio.features
 import rasterio.transform
+from numba import njit
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon, box, LineString, Point
 
@@ -394,7 +395,12 @@ def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
     cx, cy = rasterio.transform.xy(trans, rows, cols)
     if return_xy: return cx, cy
     if return_ij: return [{'row': rows[i], 'col': cols[i], 'geometry': Point(cx[i], cy[i])} for i in range(len(rows))]
-    return tuple(zip(cx, cy))
+
+    centroids = tuple(zip(cx, cy))
+    if len(centroids) == 0:
+        warnings.warn('There is no rasterized centroid for this polygon, '
+                      'probability the resolution is larger than the polygon')
+    return centroids
 
 
 def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
@@ -408,6 +414,9 @@ def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
     centroids = []
     for i, row in gp_polys.iterrows():
         cs = poly2raster_centroid(row.geometry, side, return_xy=False, return_ij=True)
+        if len(cs) == 0:
+            cs = row.geometry.centroid.coords[:][0]
+            warnings.warn(f'using the centroid of polygon {i} because no rasterized centroid is return')
         cs = pd.DataFrame(cs)
         cs[pname] = i
         centroids.append(cs)
