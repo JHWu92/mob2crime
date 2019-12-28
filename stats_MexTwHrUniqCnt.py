@@ -14,30 +14,38 @@ import pandas as pd
 from src.creds import mex_root, mex_tower_fn
 
 # In[157]:
-
+# =================
+# argument settings
+# =================
 parser = argparse.ArgumentParser(
     description='options for aggregating mexico tower daily hourly unique user in call-out or call-in data')
 parser.add_argument('--debugging', action='store_true')
 parser.add_argument('--call-in-or-out', required=True, choices=['in', 'out', 'out+in'])
+parser.add_argument('--trange', required=True, choices=['24', '4'])
 args = parser.parse_args()
 print(args)
 
-# In[8]:
+HOUR_TO_TIME_RANGE = {
+    '24': {i: i for i in range(24)},
+    '4': {
+        **{h: 0 for h in [23, 0, 1, 2, 3, 4]},  # 11pm to 5am
+        **{h: 1 for h in [5, 6, 7, 8, 9, 10]},  # 5am to 11am
+        **{h: 2 for h in [11, 12, 13, 14, 15, 16]},  # 11am to 5pm
+        **{h: 3 for h in [17, 18, 19, 20, 21, 22]},  # 6pm to 11pm
+    }
+}
+print('HOUR_TO_TIME_RANGE', HOUR_TO_TIME_RANGE[args.trange])
 
 level = logging.DEBUG if args.debugging else logging.INFO
 logging.basicConfig(filename="logs/StatMexTwHrUniqCnt.log", level=level,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# In[10]:
-
-stat_dir = f'stats/MexTwHrUniqCnt-{args.call_in_or_out}/'
+# directory to store the number of user count
+stat_dir = f'stats/MexTwHrUniqCnt-{args.call_in_or_out}-TR{args.trange}/'
 if args.debugging:
     stat_dir += 'debug/'
-print('statistics in ', stat_dir)
+print('store statistics in ', stat_dir)
 os.makedirs(stat_dir, exist_ok=True)
-
-# In[11]:
-
 
 logging.info('===============================')
 logging.info('MEX tower hourly unique user counting starts. '
@@ -97,15 +105,18 @@ class DataQueue:
 
 
 def update_stat_by_agg(local_stat, local_stat_no_tinfo, agg):
+    # compiling stat: stats[tower][hour] = set of users
     for tid, hr_uniq_users in agg.items():
         tid = tid.replace('33F430', '')
         if tid in t2gt:
             gtid = t2gt[tid]
             for hr, uniq_users in hr_uniq_users.items():
-                local_stat[gtid][int(hr)].update(uniq_users)
+                tr_bin = HOUR_TO_TIME_RANGE[args.trange][int(hr)]
+                local_stat[gtid][tr_bin].update(uniq_users)
         else:
             for hr, uniq_users in hr_uniq_users.items():
-                local_stat_no_tinfo[tid][int(hr)].update(uniq_users)
+                tr_bin = HOUR_TO_TIME_RANGE[args.trange][int(hr)]
+                local_stat_no_tinfo[tid][tr_bin].update(uniq_users)
 
 
 # In[159]:
@@ -137,7 +148,7 @@ for stat_date in dates:
     print(f'working on date: {stat_date}')
     logging.info(f'working on date: {stat_date}')
 
-    # compiling stat: stats[tower][hour] = set of users
+    # compiling stat: stats[tower][hour] = set of users in one day
     stat = defaultdict(lambda: defaultdict(set))
     stat_no_tinfo = defaultdict(lambda: defaultdict(set))
 

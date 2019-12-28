@@ -18,12 +18,17 @@ from src.utils import loubar_thres
 # 23: 23~24 (11~11:59pm)
 
 # 10pm - 7am
-HOME_HOURS = {24: ['0', '1', '2', '3', '4', '5', '6', '22', '23'],
-              48: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '44', '45', '46', '47']}
+HOME_HOURS = {
+    4: ['0', '1'],  # 11pm to 11am
+    24: ['0', '1', '2', '3', '4', '5', '6', '22', '23'],
+    48: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '44', '45', '46', '47']
+}
 # 9am - 6pm
-WORK_HOURS = {24: ['9', '10', '11', '12', '13', '14', '15', '16', '17'],
-              48: ['18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34',
-                   '35']}
+WORK_HOURS = {
+    4: ['2', '3'],  # 11am to 11pm
+    24: ['9', '10', '11', '12', '13', '14', '15', '16', '17'],
+    48: ['18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35']
+}
 MEASURES_DIR = 'data/mex_hotspot_measures'
 
 PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
@@ -137,7 +142,8 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, hotspot_type='loubar
 
 
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
-                  by='area', per_mun=False, urb_only=False, hotspot_type='loubar', verbose=0):
+                  by='area', per_mun=False, urb_only=False, area_normalized=False,
+                  hotspot_type='loubar', verbose=0):
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
