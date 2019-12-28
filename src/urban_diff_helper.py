@@ -151,52 +151,56 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
 
 def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
                           zms, zms_agebs, zms_grids, zms_sub_vors,
-                          mg_mappings, hs_type='loubar', loading=()):
+                          mg_mappings, hs_type='loubar', loading=(), area_normalization=False):
     # compute hot stats
     hs_stats_ageb = {}
     if 'ageb' in loading:
-        print('='*20, 'ageb')
+        print('=' * 20, 'ageb')
         for by in ['area', 'pop']:
             for per_mun in [False, True]:
                 for urb_only in [False, True]:
                     key = (by, per_mun, urb_only)
                     print(key, end=' ')
-                    stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only, hs_type)
+                    stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only,
+                                                 area_normalized=area_normalization, hotspot_type=hs_type)
                     hs_stats_ageb[key] = stats
         print(datetime.datetime.now())
 
     hs_stats_g = {}
     if 'grid' in loading:
-        print('='*20, 'grid')
+        print('=' * 20, 'grid')
         for key, avg in avg_g.items():
             print(key, end=' ')
             by, per_mun, urb_only = key
             zms_g = zms_grids[(per_mun, urb_only)]
-            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only, hs_type)
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only,
+                                                area_normalized=area_normalization, hotspot_type=hs_type)
             hs_stats_g[key] = stats
         print(datetime.datetime.now())
 
     hs_stats_idw = {}
     if 'idw' in loading:
-        print('='*20, 'idw')
+        print('=' * 20, 'idw')
         for key, avg in avg_idw.items():
             print(key, end=' ')
             per_mun, urb_only = key
             by = 'idw'
             zms_g = zms_grids[key]
-            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only, hs_type)
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only,
+                                                area_normalized=area_normalization, hotspot_type=hs_type)
             hs_stats_idw[key] = stats
         print(datetime.datetime.now())
 
     hs_stats_vor = {}
     if 'vor' in loading:
-        print('='*20, 'vor')
+        print('=' * 20, 'vor')
         for key, avg in avg_vor.items():
             print(key, end=' ')
             by, per_mun, urb_only = key
             zms_vor = zms_sub_vors[(per_mun, urb_only)]
             # the comp coef seems to be computed using geometric centroid, not tower location
-            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_vor, 'vor', by, per_mun, urb_only, hs_type)
+            stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_vor, 'vor', by, per_mun, urb_only,
+                                                area_normalized=area_normalization, hotspot_type=hs_type)
             hs_stats_vor[key] = stats
         print(datetime.datetime.now())
 
@@ -206,7 +210,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
             for urb_only in [False, True]:
                 key = (per_mun, urb_only)
                 print(key, end=' ')
-                stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only, hs_type)
+                stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only,
+                                           area_normalized=area_normalization, hotspot_type=hs_type)
                 hs_stats_tw[key] = stats
     return hs_stats_ageb, hs_stats_g, hs_stats_idw, hs_stats_vor, hs_stats_tw
 
@@ -218,9 +223,11 @@ if __name__ == "__main__":
     print(os.getcwd())
     print(datetime.datetime.now())
     LOADING = ('ageb', 'grid', 'idw', 'vor',)
-    N_BINS = 4
+    N_BINS = 24
+    AREA_NORMALIZATION = True
     print('loading', LOADING)
     print('n bins:', N_BINS)
+    print('area_normalization:', AREA_NORMALIZATION)
 
     ZMS, ZMS_AGEBS, ZMS_TVOR, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS = load_geoms()
 
@@ -228,7 +235,7 @@ if __name__ == "__main__":
     AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS, N_BINS)
     print(datetime.datetime.now())
 
-    # TODO not sure what it caches
+    # caches the compactness results
     compute_hotspot_stats(AVG_A, AVG_G, AVG_IDW, AVG_TW, AVG_VOR, ZMS, ZMS_AGEBS, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS,
-                          loading=LOADING)
+                          loading=LOADING, area_normalization=AREA_NORMALIZATION)
     print(datetime.datetime.now())

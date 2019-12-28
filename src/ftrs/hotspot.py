@@ -190,7 +190,6 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
                          hotspot_type='loubar', verbose=0):
     """grid and vor has the same formats"""
     assert geom_type in ('grid', 'vor')
-    area_norm_str = 'density' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -199,7 +198,10 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
         zm = zms.loc[sun]
         zm_g = zms_geoms[zms_geoms.CVE_SUN == sun].copy()
         zm_avg_g = avg_geom.reindex(zm_g.index, fill_value=0).copy()
-        if area_normalized:
+        area_norm_str = ''
+        if area_normalized and by != 'idw':
+            # cannot normalized for idw, cause idw doesn't depend on area at all
+            area_norm_str = 'density'
             zm_avg_g = zm_avg_g.apply(lambda x: x / (zm_g.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
