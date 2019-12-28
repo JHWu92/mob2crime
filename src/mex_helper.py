@@ -20,32 +20,40 @@ REGION_KINDS = ('cities', 'urban_areas_16', 'urban_areas_cvh_16', 'metropolitans
                 'metropolitans_all', 'mpa_all_uba')
 
 
-def stat_tw_dow_aver_hr_uniq_user(call_direction='out', n_bins=24):
+def stat_tw_dow_aver_hr_uniq_user(call_direction='out', n_bins=24, average_over_observed_day=True):
     """return average hourly nunique users for each tower on each day of week (dow, weekday or weekend)"""
+    average_method = '' if average_over_observed_day else '-aver_over_period'
     if n_bins == 24:
-        path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}.pickle'
+        path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}{average_method}.pickle'
+        stat_dir = f'stats/MexTwHrUniqCnt-{call_direction}'
     elif n_bins == 48:
-        path = f'stats/stat_tw_dow_aver_half_hr_uniq_user-{call_direction}.pickle'
+        path = f'stats/stat_tw_dow_aver_half_hr_uniq_user-{call_direction}{average_method}.pickle'
+        stat_dir = f'stats/MexTwHalfHrUniqCnt-{call_direction}/'
+    elif n_bins == 4:
+        path = f'stats/stat_tw_dow_aver_hr_uniq_user-{call_direction}{average_method}-TR{n_bins}.pickle'
+        stat_dir = f'stats/MexTwHrUniqCnt-{call_direction}-TR{n_bins}'
     else:
         raise ValueError(n_bins, 'not defined')
+
     if os.path.exists(path):
         print('loading cached tw average', path)
         average = pickle.load(open(path, 'rb'))
         return average
 
-    stat_dir = f'stats/MexTwHrUniqCnt-{call_direction}' if n_bins == 24 else f'stats/MexTwHalfHrUniqCnt-{call_direction}/'
     print('stats dir:', stat_dir)
     fns = sorted(glob.glob(f'{stat_dir}/*-located.csv'))
     if len(fns) == 0:
         print('no file is found')
     print('loading stats by weekday or weekend')
     store = {'wd': defaultdict(list), 'wk': defaultdict(list)}
+    nday = {'wd': 0, 'wk': 0}
     for i, fn in enumerate(fns):
         if i % 50 == 0:
             print('loading %dth file %s' % (i, fn))
         date = os.path.basename(fn)[:10]
         date = datetime.datetime.strptime(date, '%Y-%m-%d')
         dow = 'wd' if date.weekday() < 5 else 'wk'
+        nday[dow] += 1
         tmp_df = pd.read_csv(fn, index_col=0)
         for gtid, row in tmp_df.iterrows():
             store[dow][gtid].append(row)
@@ -54,7 +62,14 @@ def stat_tw_dow_aver_hr_uniq_user(call_direction='out', n_bins=24):
     average = {'wd': dict(), 'wk': dict()}
     for dow in ['wd', 'wk']:
         for gtid, rows in store[dow].items():
-            avg_row = pd.DataFrame(rows).fillna(0).mean(axis=0)
+            if average_over_observed_day:
+                # average over the number of days that the tower has count
+                # 75% of the towers are observed every weekday through the observation period
+                avg_row = pd.DataFrame(rows).fillna(0).mean(axis=0)
+            else:
+                # average over the number of days in the observation period
+                # 75% of the towers are the same as above
+                avg_row = pd.DataFrame(rows).fillna(0).sum(axis=0) / nday[dow]
             average[dow][gtid] = avg_row
     pickle.dump(average, open(path, 'wb'))
 
