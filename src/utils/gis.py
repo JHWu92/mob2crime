@@ -388,18 +388,30 @@ def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
     new_bbox = (bbox[0], bbox[1], bbox[0] + nx * side, bbox[1] + ny * side)
 
     trans = rasterio.transform.from_bounds(*new_bbox, nx, ny)
+    # r = an image array with input geometries burned in
     r = rasterio.features.rasterize([p], out_shape=(ny, nx), transform=trans)
-
+    # rows, cols are the row and col ids of the pixels
     rows = np.column_stack(np.where(r == 1))[:, 0]
     cols = np.column_stack(np.where(r == 1))[:, 1]
+    # Returns the x and y coordinates of pixels at `rows` and `cols`.
+    # The pixel's center is returned by default
     cx, cy = rasterio.transform.xy(trans, rows, cols)
+
+    if len(cx) == 0:
+        warnings.warn('There is no rasterized centroid for this polygon, '
+                      'probability the resolution is larger than the polygon. '
+                      'Using the centroid of polygon as the resterized centroid')
+
+        cx, cy = p.centroid.coords[:][0]
+        cx = [cx, ]
+        cy = [cy, ]
+        rows = np.array([0, ])
+        cols = np.array([0, ])
+
     if return_xy: return cx, cy
     if return_ij: return [{'row': rows[i], 'col': cols[i], 'geometry': Point(cx[i], cy[i])} for i in range(len(rows))]
 
     centroids = tuple(zip(cx, cy))
-    if len(centroids) == 0:
-        warnings.warn('There is no rasterized centroid for this polygon, '
-                      'probability the resolution is larger than the polygon')
     return centroids
 
 
@@ -414,9 +426,6 @@ def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
     centroids = []
     for i, row in gp_polys.iterrows():
         cs = poly2raster_centroid(row.geometry, side, return_xy=False, return_ij=True)
-        if len(cs) == 0:
-            cs = row.geometry.centroid.coords[:][0]
-            warnings.warn(f'using the centroid of polygon {i} because no rasterized centroid is return')
         cs = pd.DataFrame(cs)
         cs[pname] = i
         centroids.append(cs)
