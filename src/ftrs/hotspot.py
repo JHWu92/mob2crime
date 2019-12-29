@@ -97,7 +97,7 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=Fals
     tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
     t_pts = tower.pts().set_index('gtid')
 
-    area_norm_str = 'density' if area_normalized else ''
+    area_norm_str = 'density_' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -150,7 +150,7 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=Fals
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
                   by='area', per_mun=False, urb_only=False, area_normalized=False,
                   hotspot_type='loubar', verbose=0):
-    area_norm_str = 'density' if area_normalized else ''
+    area_norm_str = 'density_' if area_normalized else ''
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -203,7 +203,7 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
         area_norm_str = ''
         if area_normalized and by != 'idw':
             # cannot normalized for idw, cause idw doesn't depend on area at all
-            area_norm_str = 'density'
+            area_norm_str = 'density_'
             zm_avg_g = zm_avg_g.apply(lambda x: x / (zm_g.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
@@ -255,7 +255,7 @@ class HotSpot:
             paths.append(fn_pref)
             fn_pref = '/'.join(paths)
         self.fn_pref = fn_pref if fn_pref else None
-        if not fn_pref:
+        if not fn_pref and verbose:
             print('fn_pref is None, will not cache results')
 
     def calc_stats(self, hs_avg=None):
