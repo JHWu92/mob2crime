@@ -55,17 +55,19 @@ def keep_hotspot(avg, hotspot_type='loubar'):
 
 
 def _handle_geoms_pairdist_input(geoms=None, pair_dist=None):
-    if geoms is None and pair_dist is None:
-        raise ValueError('either geoms or pair_dist should be passed')
-    if geoms is not None and pair_dist is not None:
-        print('computing pair distance matrix using geoms, pair_dist passed is ignored')
-    if pair_dist is None:
+    if geoms is not None:
+        # compute pair_dist if geoms is not None
+        if pair_dist is not None:
+            print('computing pair distance matrix using geoms, pair_dist passed is ignored')
         pair_dist = pair_dist_matrix(geoms)
+    else:
+        if pair_dist is None:
+            raise ValueError('either geoms or pair_dist should be passed')
     return pair_dist
 
 
 def avg_dist(geoms=None, pair_dist=None):
-    if len(geoms) == 1:
+    if len(geoms) <= 1:
         # only 1 geometry, distance is 0
         return 0
     pair_dist = _handle_geoms_pairdist_input(geoms, pair_dist)
@@ -253,6 +255,8 @@ class HotSpot:
             paths.append(fn_pref)
             fn_pref = '/'.join(paths)
         self.fn_pref = fn_pref if fn_pref else None
+        if not fn_pref:
+            print('fn_pref is None, will not cache results')
 
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
@@ -297,6 +301,9 @@ class HotSpot:
         # self.n_hs_mit = len(self.hs_intermittent)
 
     def _calc_compactness(self, hs_index, hs_count):
+        if len(hs_index) == 0:
+            # meaning there isn't any hotspot to be computed
+            return {'comp_coef': None, 'cohesion': None, 'proximity': None, 'NMI': None, 'NMMI': None}
         target_hs = self.geoms.loc[hs_index]
         # TODO: this is a simplify version of density, assuming counts in the shape is uniformly
         #  distributed, but the underlying density is not, the smallest unit of density should
