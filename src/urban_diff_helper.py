@@ -82,10 +82,14 @@ def load_geoms():
     return zms, zms_agebs, zms_tvor, zms_grids, zms_sub_vors, mg_mappings
 
 
-def interpolation(zms_grids, zms_sub_vors, n_bins=24):
-    call_direction = 'out+in'
+def interpolation(zms_grids, zms_sub_vors, n_bins=24,average_over_observed_day=False):
 
-    aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction, n_bins=n_bins)
+    call_direction = 'out+in'
+    # if average_over_observed_day==False
+    # average over the number of days in the observation period
+    # 75% of the towers are the same as average_over_observed_day==True
+    aver = mex_helper.stat_tw_dow_aver_hr_uniq_user(call_direction, n_bins=n_bins,
+                                                    average_over_observed_day=average_over_observed_day)
     avg_tw = pd.DataFrame(aver['wd']).T
     assert avg_tw.shape[1] == n_bins
 
@@ -224,7 +228,7 @@ if __name__ == "__main__":
     print(datetime.datetime.now())
     LOADING = ('ageb', 'grid', 'idw', 'vor',)
     N_BINS = 24
-    AREA_NORMALIZATION = True
+    AREA_NORMALIZATION = False
     print('loading', LOADING)
     print('n bins:', N_BINS)
     print('area_normalization:', AREA_NORMALIZATION)
@@ -232,7 +236,8 @@ if __name__ == "__main__":
     ZMS, ZMS_AGEBS, ZMS_TVOR, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS = load_geoms()
 
     # cache avg_idw
-    AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS, N_BINS)
+    AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS, N_BINS,
+                                                           average_over_observed_day=False)
     print(datetime.datetime.now())
 
     # caches the compactness results
