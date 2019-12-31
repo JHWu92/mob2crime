@@ -233,11 +233,23 @@ if __name__ == "__main__":
     print('n bins:', N_BINS)
     print('area_normalization:', AREA_NORMALIZATION)
 
+    raster_use_p_centroid_if_none, average_over_observed_day = False, True
+    # raster_use_p_centroid_if_none, average_over_observed_day = True, False
+    # make sure only these two combination is allowed
+    assert (raster_use_p_centroid_if_none, average_over_observed_day) in [(False, True), (True, False)]
+
+    # the buggy version
+    if (raster_use_p_centroid_if_none, average_over_observed_day) == (False, True):
+        ftr_hs.MEASURES_DIR = 'data/mex_hotspot_measures_buggy'
+        ftr_hs.RASTER_USE_P_CENTROID_IF_NONE = raster_use_p_centroid_if_none
+    print('ftr_hs.MEASURES_DIR', ftr_hs.MEASURES_DIR)
+    print('ftr_hs.RASTER_USE_P_CENTROID_IF_NONE', ftr_hs.RASTER_USE_P_CENTROID_IF_NONE)
+
     ZMS, ZMS_AGEBS, ZMS_TVOR, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS = load_geoms()
 
     # cache avg_idw
     AVG_TW, AVG_A, AVG_G, AVG_IDW, AVG_VOR = interpolation(ZMS_GRIDS, ZMS_SUB_VORS, N_BINS,
-                                                           average_over_observed_day=False)
+                                                           average_over_observed_day=average_over_observed_day)
     print(datetime.datetime.now())
 
     # caches the compactness results

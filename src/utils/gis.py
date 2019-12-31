@@ -377,7 +377,7 @@ def gp_polys_to_grids(gp_polys, side, cur_crs=None, eqdc_crs=None,
     return grids
 
 
-def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
+def poly2raster_centroid(p, side, return_xy=False, return_ij=False, use_p_centroid_if_none=True):
     bbox = p.bounds
 
     diff_x = bbox[2] - bbox[0]
@@ -397,7 +397,7 @@ def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
     # The pixel's center is returned by default
     cx, cy = rasterio.transform.xy(trans, rows, cols)
 
-    if len(cx) == 0:
+    if use_p_centroid_if_none and len(cx) == 0:
         warnings.warn('There is no rasterized centroid for this polygon, '
                       'probability the resolution is larger than the polygon. '
                       'Using the centroid of polygon as the resterized centroid')
@@ -415,7 +415,7 @@ def poly2raster_centroid(p, side, return_xy=False, return_ij=False):
     return centroids
 
 
-def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
+def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id', use_p_centroid_if_none=True):
     """
     Assuming geopandas is already in equi-distant CRS
     :param gp_polys: shapes
@@ -425,7 +425,8 @@ def gp_polys_to_raster_centroids(gp_polys, side, pname='poly_id'):
     """
     centroids = []
     for i, row in gp_polys.iterrows():
-        cs = poly2raster_centroid(row.geometry, side, return_xy=False, return_ij=True)
+        cs = poly2raster_centroid(row.geometry, side, return_xy=False, return_ij=True,
+                                  use_p_centroid_if_none=use_p_centroid_if_none)
         cs = pd.DataFrame(cs)
         cs[pname] = i
         centroids.append(cs)

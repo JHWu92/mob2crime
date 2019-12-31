@@ -30,6 +30,7 @@ WORK_HOURS = {
     48: ['18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35']
 }
 MEASURES_DIR = 'data/mex_hotspot_measures'
+RASTER_USE_P_CENTROID_IF_NONE = True
 
 PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
 URB_ONLY_DISPLAY = lambda x: 'Urban' if x else 'UrbanRural'
@@ -112,7 +113,8 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=Fals
             zm_avg_t = zm_avg_t.apply(lambda x: x / (zm_t.area / 1000 ** 2))
 
         fn_pref = f'{area_norm_str}tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
+        hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
         hs_avg = None
 
         if per_mun:
@@ -165,7 +167,8 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
         if area_normalized:
             zm_avg_a = zm_avg_a.apply(lambda x: x / (zm_a.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
+        hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -206,7 +209,8 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
             area_norm_str = 'density_'
             zm_avg_g = zm_avg_g.apply(lambda x: x / (zm_g.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
-        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref)
+        hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -235,10 +239,13 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
 
 class HotSpot:
     def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0,
-                 directory=None, fn_pref=None):
+                 directory=None, fn_pref=None, raster_use_p_centroid_if_none=True):
         """
         :param directory: the directory to store data
         :param fn_pref: the prefix str for the file name. If None, no data is cached
+        :param raster_use_p_centroid_if_none: some geoms could be smaller than raster_resolution,
+            if False, there will be no centroids of rasterization returned for these geoms
+            if True, the centroid of each of these geoms is returned as the rasterized centroid.
         """
         self.sqrt_area = np.sqrt(cover_region.Area)
         self.avg = avg.copy()
@@ -248,6 +255,7 @@ class HotSpot:
         self.raster_resolution = raster_resolution
         self.verbose = verbose
         self.n_bins = avg.shape[1]
+        self.raster_use_p_centroid_if_none = raster_use_p_centroid_if_none
         if fn_pref:  # not None, not '', not 0, etc
             paths = []
             if directory: paths.append(directory)
@@ -328,7 +336,8 @@ class HotSpot:
         # raster_rper['Area'] = raster_rper.area
         # raster_rper['Mass'] = raster_rper.Area * raster_rper.Density
         raster_rper = gis.gp_polys_to_raster_centroids(target_hs, side=self.raster_resolution,
-                                                       pname=target_hs.index.name)
+                                                       pname=target_hs.index.name,
+                                                       use_p_centroid_if_none=self.raster_use_p_centroid_if_none)
         raster_rper = raster_rper.merge(hs_density.reset_index())
         raster_rper['Area'] = self.raster_resolution ** 2
         raster_rper['Mass'] = raster_rper.Area * raster_rper.Density
