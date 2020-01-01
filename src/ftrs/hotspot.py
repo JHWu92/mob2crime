@@ -239,7 +239,7 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
 
 class HotSpot:
     def __init__(self, avg, geoms, cover_region, hotspot_type='loubar', raster_resolution=100, verbose=0,
-                 directory=None, fn_pref=None, raster_use_p_centroid_if_none=True):
+                 directory=None, fn_pref=None, raster_use_p_centroid_if_none=True, roll_width=3, chunk_width=4):
         """
         :param directory: the directory to store data
         :param fn_pref: the prefix str for the file name. If None, no data is cached
@@ -253,9 +253,18 @@ class HotSpot:
         self.region = cover_region
         self.hotspot_type = hotspot_type
         self.raster_resolution = raster_resolution
+        self.raster_use_p_centroid_if_none = raster_use_p_centroid_if_none
         self.verbose = verbose
         self.n_bins = avg.shape[1]
-        self.raster_use_p_centroid_if_none = raster_use_p_centroid_if_none
+
+        if roll_width > self.n_bins / 2:
+            raise ValueError(f'roll width ({roll_width}) should be no more than 1/2 of n_bins ({self.n_bins})')
+        if chunk_width != 0 and self.n_bins % chunk_width != 0:
+            raise ValueError(f'chunk width {chunk_width} should be a factor of n_bins ({self.n_bins})')
+        self.roll_width = roll_width
+        self.chunk_width = chunk_width
+
+        # caching file name prefix
         if fn_pref:  # not None, not '', not 0, etc
             paths = []
             if directory: paths.append(directory)
@@ -266,11 +275,25 @@ class HotSpot:
         if not fn_pref and verbose:
             print('fn_pref is None, will not cache results')
 
+        # measurements
+        self.compactness = {}
+        self.n_hs = {}
+
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
         self._number_of_hs()
         self._hs_type_by_persistence()
         self._hs_all_compactness()
+        if self.roll_width <= 1:
+            print('roll width <=1, not computing rolling')
+        else:
+            self._number_of_hs_rolling()
+            self._hs_rolling_compactness()
+        if self.chunk_width <= 1:
+            print('roll width <=1, not computing rolling')
+        else:
+            self._number_of_hs_chunking()
+            self._hs_chunking_compactness()
 
     def _get_hs(self, hs_avg=None):
         if self.verbose: print('masking out non hot spot, defined by', self.hotspot_type)
@@ -279,11 +302,38 @@ class HotSpot:
         else:
             self.hs_avg = hs_avg
 
-    def _number_of_hs(self):
-        if self.verbose: print('computing number of hot spot per hour')
-        n_hs_hourly = (self.hs_avg != 0).sum(axis=0)
-        n_hs_average = n_hs_hourly.mean()
-        self.n_hs = {'average': n_hs_average, 'hourly': n_hs_hourly}
+    def _rolling_hs_avg(self):
+        rstep = int(pd.np.ceil((self.roll_width - 1) / 2))
+        lstep = rstep - self.roll_width + 1
+        hour_bins = self.hs_avg.columns.tolist()
+
+        for i in range(self.n_bins):
+            center = hour_bins[i]
+            left = i + lstep
+            right = i + rstep
+            if left < 0:
+                left_bins = hour_bins[left:]
+                right_bins = hour_bins[:right + 1]
+                rolling_bins = left_bins + right_bins
+            elif right >= self.n_bins:
+                left_bins = hour_bins[left:]
+                right_bins = hour_bins[:(right + 1) - 24]
+                rolling_bins = left_bins + right_bins
+            else:
+                rolling_bins = hour_bins[left:right + 1]
+            # print(left, i, right, sorted([int(j) for j in rolling_bins]))
+
+            hs_avg_rolling = self.hs_avg[rolling_bins]
+            yield center, hs_avg_rolling
+
+    def _chunking_hs_avg(self):
+        hour_bins = self.hs_avg.columns.tolist()
+        for i in range(0, self.n_bins, self.chunk_width):
+            hour = hour_bins[i]
+            chunk_bins = hour_bins[i:i + self.chunk_width]
+            # hour = chunk_bins[0] + '-' + chunk_bins[-1]
+            hs_avg_chunk = self.hs_avg[chunk_bins]
+            yield hour, hs_avg_chunk
 
     def _hs_type_by_persistence(self):
         if self.verbose: print('computing persistency and obtaining permanent hot spots')
@@ -309,10 +359,21 @@ class HotSpot:
         # self.n_hs_mit = len(self.hs_intermittent)
 
     def _calc_compactness(self, hs_index, hs_count):
+        """
+
+        :param hs_index: pull up the geoms by hs_index => target_hs. target_hs are then used to compute compactness
+        :param hs_count: hotspot's (mean if not hourly) number of users. Used to compute NMMI
+        :return:
+        """
+        # meaning there isn't any hotspot to be computed
+        # return None and exit
         if len(hs_index) == 0:
-            # meaning there isn't any hotspot to be computed
+            print('Len of hs_index==0, no hotspot to be considered')
             return {'comp_coef': None, 'cohesion': None, 'proximity': None, 'NMI': None, 'NMMI': None}
+
         target_hs = self.geoms.loc[hs_index]
+
+        # this density is to redistribute the mass for computing NMMI
         # TODO: this is a simplify version of density, assuming counts in the shape is uniformly
         #  distributed, but the underlying density is not, the smallest unit of density should
         #  be the interection of vor and ageb
@@ -376,13 +437,84 @@ class HotSpot:
 
         return {'comp_coef': comp_coef, 'cohesion': coh, 'proximity': prox, 'NMI': nmi, 'NMMI': nmmi}
 
+    def _number_of_hs(self):
+        if self.verbose: print('computing number of hot spot per hour')
+        n_hs_hourly = (self.hs_avg != 0).sum(axis=0)
+        n_hs_average = n_hs_hourly.mean()
+        self.n_hs['average'] = n_hs_average
+        self.n_hs['hourly'] = n_hs_hourly
+
+    def _number_of_hs_chunking(self):
+        if self.verbose: print(f'computing number of hot spot per chunking width={self.chunk_width}')
+        avg_n_hs_chunking = {}
+        for hour, hs_avg_chunking in self._chunking_hs_avg():
+            avg_n_hs_chunking[hour] = (hs_avg_chunking != 0).sum(axis=0).mean()
+        self.n_hs['chunking'] = pd.Series(avg_n_hs_chunking)
+
+    def _number_of_hs_rolling(self):
+        if self.verbose: print(f'computing number of hot spot per rolling width={self.roll_width}')
+        avg_n_hs_rolling = {}
+        for hour, hs_avg_rolling in self._rolling_hs_avg():
+            avg_n_hs_rolling[hour] = (hs_avg_rolling != 0).sum(axis=0).mean()
+        self.n_hs['rolling'] = pd.Series(avg_n_hs_rolling)
+
+    def _hs_rolling_compactness(self):
+        rolling_comp_fn = f'{self.fn_pref}_rolling{self.roll_width}_compactness.json'
+        if self.fn_pref and os.path.exists(rolling_comp_fn):
+            if self.verbose: print(f'loading existing rolling {self.roll_width} compactness at', rolling_comp_fn)
+            with open(rolling_comp_fn, 'r') as f:
+                self.compactness['rolling'] = json.load(f)
+            return
+
+        if self.verbose: print(f'computing compactness of hot spot per rolling width={self.roll_width}')
+        compact_index_rolling = []
+        for hour, hs_avg_rolling in self._rolling_hs_avg():
+            rolling_persistence = (hs_avg_rolling != 0).sum(axis=1)
+            rolling_hs_index = rolling_persistence[rolling_persistence == self.roll_width].index
+            rolling_hs_count = hs_avg_rolling.loc[rolling_hs_index].mean(axis=1)
+            c_index = self._calc_compactness(rolling_hs_index, rolling_hs_count)
+            c_index['hour'] = hour
+            compact_index_rolling.append(c_index)
+
+        if self.fn_pref:
+            if self.verbose: print(f'dumping rolling {self.roll_width} compactness at', rolling_comp_fn)
+            with open(rolling_comp_fn, 'w') as f:
+                json.dump(compact_index_rolling, f)
+
+        self.compactness['rolling'] = compact_index_rolling
+
+    def _hs_chunking_compactness(self):
+        chunking_comp_fn = f'{self.fn_pref}_chunking{self.chunk_width}_compactness.json'
+        if self.fn_pref and os.path.exists(chunking_comp_fn):
+            if self.verbose: print(f'loading existing chunking {self.chunk_width} compactness at', chunking_comp_fn)
+            with open(chunking_comp_fn, 'r') as f:
+                self.compactness['chunking'] = json.load(f)
+            return
+
+        if self.verbose: print(f'computing compactness of hot spot per chunking width={self.chunk_width}')
+        compact_index_chunking = []
+        for hour, hs_avg_chunking in self._chunking_hs_avg():
+            chunking_persistence = (hs_avg_chunking != 0).sum(axis=1)
+            chunking_hs_index = chunking_persistence[chunking_persistence == self.chunk_width].index
+            chunking_hs_count = hs_avg_chunking.loc[chunking_hs_index].mean(axis=1)
+            c_index = self._calc_compactness(chunking_hs_index, chunking_hs_count)
+            c_index['hour'] = hour
+            compact_index_chunking.append(c_index)
+
+        if self.fn_pref:
+            if self.verbose: print(f'dumping chunking {self.chunk_width} compactness at', chunking_comp_fn)
+            with open(chunking_comp_fn, 'w') as f:
+                json.dump(compact_index_chunking, f)
+
+        self.compactness['chunking'] = compact_index_chunking
+
     def _hs_all_compactness(self):
         compactness_fn = f'{self.fn_pref}_compactness.json'
 
         if self.fn_pref and os.path.exists(compactness_fn):
             if self.verbose: print('loading existing compactness at', compactness_fn)
             with open(compactness_fn, 'r') as f:
-                self.compactness = json.load(f)
+                self.compactness.update(json.load(f))
             return
 
         if self.verbose: print('computing compactness indexes for all day')
@@ -410,8 +542,9 @@ class HotSpot:
             compact_index_hourly.append(c_index)
         compact_index_hourly = compact_index_hourly
 
-        self.compactness = {'all_day': compact_index_all_day, 'home_time': compact_index_home,
-                            'work_time': compact_index_work, 'hourly': compact_index_hourly}
+        self.compactness.update({'all_day': compact_index_all_day, 'home_time': compact_index_home,
+                                 'work_time': compact_index_work, 'hourly': compact_index_hourly})
         if self.fn_pref:
+            if self.verbose: print(f'dumping compactness at', compactness_fn)
             with open(compactness_fn, 'w') as f:
                 json.dump(self.compactness, f)
