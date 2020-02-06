@@ -456,6 +456,7 @@ def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None, largest_len=4000
 
 @njit
 def pairwise_dist_average(vec, square=True):
+    # Vec is a n*2 np array
     n = len(vec)
     s = 0
     for i in range(n):
@@ -465,3 +466,19 @@ def pairwise_dist_average(vec, square=True):
                 dist = np.sqrt(dist)
             s += dist
     return s / (n * (n - 1) / 2)
+
+
+@njit
+def pairwise_dist_mass_average(vec, mass, square=True):
+    # Vec is a n*2 np array
+    n = len(vec)
+    sum_dij_mi_mj = 0
+    sum_mi_mj = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            dist = (vec[i, 0] - vec[j, 0]) ** 2 + (vec[i, 1] - vec[j, 1]) ** 2
+            if not square:
+                dist = np.sqrt(dist)
+            sum_dij_mi_mj += dist * mass[i] * mass[j]
+            sum_mi_mj += mass[i] * mass[j]
+    return sum_dij_mi_mj / sum_mi_mj
