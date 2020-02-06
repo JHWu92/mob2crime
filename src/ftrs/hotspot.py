@@ -85,6 +85,7 @@ def avg_dist_square(geoms=None, pair_dist=None):
 
 
 def pair_dist_matrix(geoms):
+    # use the centroid of the geometry to compute distance
     if len(geoms) <= 1:
         return 0
     if len(geoms) > 40000:
@@ -93,12 +94,14 @@ def pair_dist_matrix(geoms):
     return pair_dist
 
 
-def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=False, hotspot_type='loubar', verbose=0):
+def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=False, hotspot_type='loubar', verbose=0,
+                roll_width=3, chunk_width=4):
     import src.mex.tower as tower
     tXzms = tower.pts_x_region('mpa', per_mun, urb_only)
     t_pts = tower.pts().set_index('gtid')
 
     area_norm_str = 'density_' if area_normalized else ''
+    if MEASURES_DIR.endswith('buggy'): area_norm_str.replace('_', '')
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -114,7 +117,8 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=Fals
 
         fn_pref = f'{area_norm_str}tw_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_t, zm_t, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
-                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE,
+                     roll_width=roll_width, chunk_width=chunk_width)
         hs_avg = None
 
         if per_mun:
@@ -151,8 +155,10 @@ def hs_stats_tw(avg_tw, zms, per_mun=False, urb_only=False, area_normalized=Fals
 
 def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
                   by='area', per_mun=False, urb_only=False, area_normalized=False,
-                  hotspot_type='loubar', verbose=0):
+                  hotspot_type='loubar', verbose=0,
+                  roll_width=3, chunk_width=4):
     area_norm_str = 'density_' if area_normalized else ''
+    if MEASURES_DIR.endswith('buggy'): area_norm_str.replace('_', '')
     n_hs = {}
     compactness = {}
     print('working on', end=' ')
@@ -168,7 +174,8 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
             zm_avg_a = zm_avg_a.apply(lambda x: x / (zm_a.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}ageb_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_a, zm_a, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
-                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE,
+                     roll_width=roll_width, chunk_width=chunk_width)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -192,7 +199,7 @@ def hs_stats_ageb(avg_a, zms, zms_agebs, mg_mapping,
 
 def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
                          per_mun=False, urb_only=False, area_normalized=False,
-                         hotspot_type='loubar', verbose=0):
+                         hotspot_type='loubar', verbose=0, roll_width=3, chunk_width=4):
     """grid and vor has the same formats"""
     assert geom_type in ('grid', 'vor')
     n_hs = {}
@@ -207,10 +214,12 @@ def hs_stats_grid_or_vor(avg_geom, zms, zms_geoms, geom_type='grid', by='area',
         if area_normalized and by != 'idw':
             # cannot normalized for idw, cause idw doesn't depend on area at all
             area_norm_str = 'density_'
+            if MEASURES_DIR.endswith('buggy'): area_norm_str.replace('_', '')
             zm_avg_g = zm_avg_g.apply(lambda x: x / (zm_g.area / 1000 ** 2))
         fn_pref = f'{area_norm_str}{geom_type}_{by}_{ADMIN_STR(per_mun, urb_only)}_ZM{sun}'
         hs = HotSpot(zm_avg_g, zm_g, zm, hotspot_type, verbose=verbose, directory=MEASURES_DIR, fn_pref=fn_pref,
-                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE)
+                     raster_use_p_centroid_if_none=RASTER_USE_P_CENTROID_IF_NONE,
+                     roll_width=roll_width, chunk_width=chunk_width)
         hs_avg = None
 
         # TODO: hs_stats can merge, they differ in how to obtain mun_level hotspot
@@ -281,19 +290,22 @@ class HotSpot:
 
     def calc_stats(self, hs_avg=None):
         self._get_hs(hs_avg)
-        self._number_of_hs()
         self._hs_type_by_persistence()
+        self._number_of_hs()
         self._hs_all_compactness()
+        self._hs_mass_comp_coef()
+
         if self.roll_width <= 1:
-            print('roll width <=1, not computing rolling')
+            if self.verbose: print('roll width <=1, not computing rolling')
         else:
             self._number_of_hs_rolling()
             self._hs_rolling_compactness()
         if self.chunk_width <= 1:
-            print('roll width <=1, not computing rolling')
+            if self.verbose: print('roll width <=1, not computing rolling')
         else:
             self._number_of_hs_chunking()
             self._hs_chunking_compactness()
+            self._hs_chunking_mass_comp_coef()
 
     def _get_hs(self, hs_avg=None):
         if self.verbose: print('masking out non hot spot, defined by', self.hotspot_type)
@@ -334,6 +346,12 @@ class HotSpot:
             # hour = chunk_bins[0] + '-' + chunk_bins[-1]
             hs_avg_chunk = self.hs_avg[chunk_bins]
             yield hour, hs_avg_chunk
+
+    def get_hourly_hs_index(self):
+        hourly_hs_index = {}
+        for hour in self.hs_avg:
+            hourly_hs_index[hour] = self.hs_avg[self.hs_avg[hour] != 0].index.tolist()
+        return hourly_hs_index
 
     def _hs_type_by_persistence(self):
         if self.verbose: print('computing persistency and obtaining permanent hot spots')
@@ -381,6 +399,7 @@ class HotSpot:
         hs_density.name = 'Density'
 
         # index: compacity
+        # use the centroid of the geometry to compute distance, for Vor, not the tower location
         hs_pair_d_avg = avg_dist(target_hs)  # distance among hotspots
         comp_coef = compacity_coefficient(hs_pair_d_avg, self.sqrt_area)
 
@@ -437,26 +456,48 @@ class HotSpot:
 
         return {'comp_coef': comp_coef, 'cohesion': coh, 'proximity': prox, 'NMI': nmi, 'NMMI': nmmi}
 
+    def _get_hs_area(self, hs_index):
+        if len(hs_index) == 0:
+            return 0
+        else:
+            return self.geoms.loc[hs_index].area.sum() / 1000 / 1000
+
     def _number_of_hs(self):
         if self.verbose: print('computing number of hot spot per hour')
         n_hs_hourly = (self.hs_avg != 0).sum(axis=0)
         n_hs_average = n_hs_hourly.mean()
         self.n_hs['average'] = n_hs_average
-        self.n_hs['hourly'] = n_hs_hourly
+
+        # self.n_hs['hourly'] = n_hs_hourly
+
+        self.n_hs['all_day'] = {'NHS': self.n_hs_per, 'AHS': self._get_hs_area(self.hs_permanent.index)}
+        self.n_hs['home_time'] = {'NHS': self.n_hs_per_home, 'AHS': self._get_hs_area(self.hs_permanent_home.index)}
+        self.n_hs['work_time'] = {'NHS': self.n_hs_per_work, 'AHS': self._get_hs_area(self.hs_permanent_work.index)}
+
+        n_a_hs_hourly = []
+        for hour in self.hs_avg:
+            hs_count_hourly = self.hs_avg[hour]
+            hs_count_hourly = hs_count_hourly[hs_count_hourly != 0]
+            hs_index = hs_count_hourly.index
+            n_a_hs_per_hour = {'hour': hour, 'NHS': len(hs_index), 'AHS': self._get_hs_area(hs_index)}
+            n_a_hs_hourly.append(n_a_hs_per_hour)
+        self.n_hs['hourly'] = n_a_hs_hourly
 
     def _number_of_hs_chunking(self):
         if self.verbose: print(f'computing number of hot spot per chunking width={self.chunk_width}')
-        avg_n_hs_chunking = {}
+        avg_n_hs_chunking = []
         for hour, hs_avg_chunking in self._chunking_hs_avg():
-            avg_n_hs_chunking[hour] = (hs_avg_chunking != 0).sum(axis=0).mean()
-        self.n_hs['chunking'] = pd.Series(avg_n_hs_chunking)
+            hs_index = hs_avg_chunking[(hs_avg_chunking != 0).sum(axis=1) == self.chunk_width].index
+            avg_n_hs_chunking.append({'hour': hour, 'NHS': len(hs_index), 'AHS': self._get_hs_area(hs_index)})
+        self.n_hs['chunking'] = avg_n_hs_chunking
 
     def _number_of_hs_rolling(self):
         if self.verbose: print(f'computing number of hot spot per rolling width={self.roll_width}')
-        avg_n_hs_rolling = {}
+        avg_n_hs_rolling = []
         for hour, hs_avg_rolling in self._rolling_hs_avg():
-            avg_n_hs_rolling[hour] = (hs_avg_rolling != 0).sum(axis=0).mean()
-        self.n_hs['rolling'] = pd.Series(avg_n_hs_rolling)
+            hs_index = hs_avg_rolling[(hs_avg_rolling != 0).sum(axis=1) == self.roll_width].index
+            avg_n_hs_rolling.append({'hour': hour, 'NHS': len(hs_index), 'AHS': self._get_hs_area(hs_index)})
+        self.n_hs['rolling'] = avg_n_hs_rolling
 
     def _hs_rolling_compactness(self):
         rolling_comp_fn = f'{self.fn_pref}_rolling{self.roll_width}_compactness.json'
@@ -508,6 +549,16 @@ class HotSpot:
 
         self.compactness['chunking'] = compact_index_chunking
 
+    def _hs_chunking_mass_comp_coef(self):
+
+        for i, (hour, hs_avg_chunking) in enumerate(self._chunking_hs_avg()):
+            chunking_persistence = (hs_avg_chunking != 0).sum(axis=1)
+            chunking_hs_index = chunking_persistence[chunking_persistence == self.chunk_width].index
+            mass_comp_coef = self.__mass_comp_coef(chunking_hs_index)
+            c_index = self.compactness['chunking'][i]
+            assert c_index['hour'] == hour
+            c_index['mass_comp_coef'] = mass_comp_coef
+
     def _hs_all_compactness(self):
         compactness_fn = f'{self.fn_pref}_compactness.json'
 
@@ -548,3 +599,38 @@ class HotSpot:
             if self.verbose: print(f'dumping compactness at', compactness_fn)
             with open(compactness_fn, 'w') as f:
                 json.dump(self.compactness, f)
+
+    def __mass_comp_coef(self, hs_index):
+
+        if len(hs_index) == 1:
+            mass_comp_coef = 0
+        elif len(hs_index) == 0:
+            mass_comp_coef = None
+        else:
+            hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+            hs_count = np.array(hs_count.tolist())
+            hs_geoms = self.geoms.loc[hs_index]
+            hs_centroid = hs_geoms.geometry.apply(lambda x: x.centroid.coords[:][0]).tolist()
+            hs_centroid = np.array(hs_centroid)
+            mass_comp_coef = gis.pairwise_dist_mass_average(hs_centroid, hs_count, square=False) / self.sqrt_area
+        return mass_comp_coef
+
+    def _hs_mass_comp_coef(self):
+
+        hs_index = self.hs_permanent.index
+        self.compactness['all_day']['mass_comp_coef'] = self.__mass_comp_coef(hs_index)
+
+        hs_index = self.hs_permanent_work.index
+        self.compactness['home_time']['mass_comp_coef'] = self.__mass_comp_coef(hs_index)
+
+        hs_index = self.hs_permanent_home.index
+        self.compactness['work_time']['mass_comp_coef'] = self.__mass_comp_coef(hs_index)
+
+        for i, hour in enumerate(self.hs_avg):
+            hs_count_hourly = self.hs_avg[hour]
+            hs_count_hourly = hs_count_hourly[hs_count_hourly != 0]
+            hs_index = hs_count_hourly.index
+            mass_comp_coef = self.__mass_comp_coef(hs_index)
+            c_index = self.compactness['hourly'][i]
+            assert c_index['hour'] == hour
+            c_index['mass_comp_coef'] = mass_comp_coef
