@@ -11,8 +11,8 @@ import src.ftrs.dilatation as dilatation
 import pandas as pd
 import datetime as dt
 
-PER_MUN_DISPLAY = lambda x: 'PerMun' if x else 'Metro'
-URB_ONLY_DISPLAY = lambda x: 'Urban' if x else 'UrbanRural'
+PER_MUN_DISPLAY = lambda x: 'PerMuni' if x else 'Metro'
+URB_ONLY_DISPLAY = lambda x: 'U' if x else 'UR'
 ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
 zms_sort_cols = ['Area', 'Area_urb', 'Area_rur', 'Area_urb_pcnt', 'Area_rur_pcnt', 'pobtot', 'pob_urb', 'pob_rur',
@@ -82,8 +82,7 @@ def load_geoms():
     return zms, zms_agebs, zms_tvor, zms_grids, zms_sub_vors, mg_mappings
 
 
-def interpolation(zms_grids, zms_sub_vors, n_bins=24,average_over_observed_day=False):
-
+def interpolation(zms_grids, zms_sub_vors, n_bins=24, average_over_observed_day=False):
     call_direction = 'out+in'
     # if average_over_observed_day==False
     # average over the number of days in the observation period
@@ -155,7 +154,8 @@ def compute_dilatation(avg_a, avg_g, avg_idw, zms, zms_agebs, zms_grids):
 
 def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
                           zms, zms_agebs, zms_grids, zms_sub_vors,
-                          mg_mappings, hs_type='loubar', loading=(), area_normalization=False):
+                          mg_mappings, hs_type='loubar', loading=(), area_normalization=False, verbose=0,
+                          roll_width=3, chunk_width=4):
     # compute hot stats
     hs_stats_ageb = {}
     if 'ageb' in loading:
@@ -166,7 +166,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
                     key = (by, per_mun, urb_only)
                     print(key, end=' ')
                     stats = ftr_hs.hs_stats_ageb(avg_a[by], zms, zms_agebs, mg_mappings, by, per_mun, urb_only,
-                                                 area_normalized=area_normalization, hotspot_type=hs_type)
+                                                 area_normalized=area_normalization, hotspot_type=hs_type,
+                                                 verbose=verbose, roll_width=roll_width, chunk_width=chunk_width)
                     hs_stats_ageb[key] = stats
         print(datetime.datetime.now())
 
@@ -178,7 +179,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
             by, per_mun, urb_only = key
             zms_g = zms_grids[(per_mun, urb_only)]
             stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only,
-                                                area_normalized=area_normalization, hotspot_type=hs_type)
+                                                area_normalized=area_normalization, hotspot_type=hs_type,
+                                                verbose=verbose, roll_width=roll_width, chunk_width=chunk_width)
             hs_stats_g[key] = stats
         print(datetime.datetime.now())
 
@@ -191,7 +193,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
             by = 'idw'
             zms_g = zms_grids[key]
             stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_g, 'grid', by, per_mun, urb_only,
-                                                area_normalized=area_normalization, hotspot_type=hs_type)
+                                                area_normalized=area_normalization, hotspot_type=hs_type,
+                                                verbose=verbose, roll_width=roll_width, chunk_width=chunk_width)
             hs_stats_idw[key] = stats
         print(datetime.datetime.now())
 
@@ -204,7 +207,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
             zms_vor = zms_sub_vors[(per_mun, urb_only)]
             # the comp coef seems to be computed using geometric centroid, not tower location
             stats = ftr_hs.hs_stats_grid_or_vor(avg, zms, zms_vor, 'vor', by, per_mun, urb_only,
-                                                area_normalized=area_normalization, hotspot_type=hs_type)
+                                                area_normalized=area_normalization, hotspot_type=hs_type,
+                                                verbose=verbose, roll_width=roll_width, chunk_width=chunk_width)
             hs_stats_vor[key] = stats
         print(datetime.datetime.now())
 
@@ -215,7 +219,8 @@ def compute_hotspot_stats(avg_a, avg_g, avg_idw, avg_tw, avg_vor,
                 key = (per_mun, urb_only)
                 print(key, end=' ')
                 stats = ftr_hs.hs_stats_tw(avg_tw, zms, per_mun, urb_only,
-                                           area_normalized=area_normalization, hotspot_type=hs_type)
+                                           area_normalized=area_normalization, hotspot_type=hs_type,
+                                           verbose=verbose, roll_width=roll_width, chunk_width=chunk_width)
                 hs_stats_tw[key] = stats
     return hs_stats_ageb, hs_stats_g, hs_stats_idw, hs_stats_vor, hs_stats_tw
 
@@ -229,9 +234,12 @@ if __name__ == "__main__":
     LOADING = ('ageb', 'grid', 'idw', 'vor',)
     N_BINS = 24
     AREA_NORMALIZATION = False
+    ROLL_WIDTH = 5
+    CHUNK_WIDTH = 6
     print('loading', LOADING)
     print('n bins:', N_BINS)
     print('area_normalization:', AREA_NORMALIZATION)
+    print(f'roll width={ROLL_WIDTH}, chunk width={CHUNK_WIDTH}')
 
     raster_use_p_centroid_if_none, average_over_observed_day = False, True
     # raster_use_p_centroid_if_none, average_over_observed_day = True, False
@@ -254,5 +262,6 @@ if __name__ == "__main__":
 
     # caches the compactness results
     compute_hotspot_stats(AVG_A, AVG_G, AVG_IDW, AVG_TW, AVG_VOR, ZMS, ZMS_AGEBS, ZMS_GRIDS, ZMS_SUB_VORS, MG_MAPPINGS,
-                          loading=LOADING, area_normalization=AREA_NORMALIZATION)
+                          loading=LOADING, area_normalization=AREA_NORMALIZATION,
+                          roll_width=ROLL_WIDTH, chunk_width=CHUNK_WIDTH)
     print(datetime.datetime.now())
