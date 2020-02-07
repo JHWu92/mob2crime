@@ -1,5 +1,31 @@
 import numpy as np
 from numba import njit
+import src.utils.gis as gis
+
+
+def comp_coef(su, sqrt_area):
+    # no hotspots
+    if len(su) == 0:
+        return None
+    # only one hotspots
+    if len(su) == 1:
+        return 0
+    # multiple hotspots
+    centroids = su.geometry.apply(lambda x: x.centroid.coords[:][0]).tolist()
+    centroids = np.array(centroids)
+    return gis.pairwise_dist_average(centroids, square=False) / sqrt_area
+
+
+def mass_comp_coef(su, footfall, sqrt_area):
+    if len(su) == 0:
+        mcomp = None
+    elif len(su) == 1:
+        mcomp = 0
+    else:
+        centroids = su.geometry.apply(lambda x: x.centroid.coords[:][0]).tolist()
+        centroids = np.array(centroids)
+        mcomp = gis.pairwise_dist_mass_average(centroids, footfall, square=False) / sqrt_area
+    return mcomp
 
 
 def compacity_coefficient(pairwise_distance_average, sqrt_area):
