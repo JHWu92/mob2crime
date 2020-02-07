@@ -409,6 +409,7 @@ class HotSpot:
         # TODO: no idea on how to choose area_pcnt_thres. Clipping the grids won't fit the MI raster equation.
         #  Not Clipping will bring much extra area.
         #  Rastering first is very time consuming. But I am not sure about the vector form formula
+        #  solved
         # raster_rper = gis.gp_polys_to_grids(target_hs, pname=target_hs.index.name, side=self.raster_resolution,
         #                                     no_grid_by_area=True, clip_by_poly=False, area_pcnt_thres=0.2)
         # raster_rper.crs = target_hs.crs
@@ -600,14 +601,16 @@ class HotSpot:
             with open(compactness_fn, 'w') as f:
                 json.dump(self.compactness, f)
 
-    def __mass_comp_coef(self, hs_index):
+    def __mass_comp_coef(self, hs_index, hs_count=None):
 
         if len(hs_index) == 1:
             mass_comp_coef = 0
         elif len(hs_index) == 0:
             mass_comp_coef = None
         else:
-            hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+            if hs_count is None:
+                hs_count = self.hs_avg.loc[hs_index].mean(axis=1)
+
             hs_count = np.array(hs_count.tolist())
             hs_geoms = self.geoms.loc[hs_index]
             hs_centroid = hs_geoms.geometry.apply(lambda x: x.centroid.coords[:][0]).tolist()
@@ -630,7 +633,9 @@ class HotSpot:
             hs_count_hourly = self.hs_avg[hour]
             hs_count_hourly = hs_count_hourly[hs_count_hourly != 0]
             hs_index = hs_count_hourly.index
-            mass_comp_coef = self.__mass_comp_coef(hs_index)
+            # TODO: it uses the average across 24 hours footfall use mass
+            #  but it should use its own hour
+            mass_comp_coef = self.__mass_comp_coef(hs_index, hs_count_hourly.loc[hs_index])
             c_index = self.compactness['hourly'][i]
             assert c_index['hour'] == hour
             c_index['mass_comp_coef'] = mass_comp_coef
