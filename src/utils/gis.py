@@ -147,7 +147,9 @@ def lonlats2vor_gp(lonlats, radius=None, dataframe=False, lonlat_bounded=True):
     return vor_gp(vor, radius, dataframe, lonlat_bounded)
 
 
-def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, area_crs=None, intersection_only=True):
+def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2',
+                cur_crs=None, area_crs=None, intersection_only=True,
+                verbose=1):
     """Compute the weights of from polygons 1 to polygons 2,
     So that the statistics in polys1 can be transferred to polys2
 
@@ -201,7 +203,8 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
         assign_crs(polys2, cur_crs)
 
     # get intersections between polys1 and polys2
-    print(f'computing the intersection between p1 {pname1} and p2 {pname2}')
+    if verbose:
+        print(f'computing the intersection between p1 {pname1} and p2 {pname2}')
     if len(polys1) > 10 * len(polys2):
         # TODO: this sjoin could be really slow if len(polys1) >> len(polys2)
         # so swap p1 and p2 first in sjoin, then swap back the index
@@ -223,7 +226,8 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     itxns = gp.GeoDataFrame(itxns)
 
     # get area of the intersections
-    print('computing area of the intersections')
+    if verbose:
+        print('computing area of the intersections')
     if do_crs_transform:
         itxns.crs = polys1.crs
         itxns_for_area = itxns.to_crs(area_crs)
@@ -233,7 +237,8 @@ def polys2polys(polys1, polys2, pname1='poly1', pname2='poly2', cur_crs=None, ar
     itxns.drop(itxns[itxns['iarea'] == 0].index, inplace=True)
 
     # compute the weight
-    print('computing the weight')
+    if verbose:
+        print('computing the weight')
     if intersection_only:
         polys1_area = itxns.groupby(pname1).apply(lambda x: x['iarea'].sum()).to_frame()
         polys2_area = itxns.groupby(pname2).apply(lambda x: x['iarea'].sum()).to_frame()
