@@ -72,7 +72,6 @@ def ftr_hs_scale(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
             print('AHS is not computed, but the data is incomplete')
 
     if updated:
-        print(features)
         city['features'][feature_set_name] = features
         update_feature(db, city)
 
@@ -117,10 +116,10 @@ def ftr_compacity(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
     return city
 
 
-def ftr_compactness(db, admin_id, admin_lvl, boundary_type, su_type, intpl,
+def ftr_compactness(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
                     hotspot_type='loubar', raster_resolution=100, raster_use_p_centroid_if_none=False,
                     su=None, hotspots_per_hour=None, redo=False, verbose=0):
-    city = get_city_features(db, admin_id, admin_lvl, boundary_type, su_type, intpl)
+    city = get_city_features(db, admin_lvl, admin_id, boundary_type, su_type, intpl)
     feature_names = ['COHE', 'PROX', 'NMI', 'NMMI']
 
     # if update, new feature is computed, the doc in db needs update.
