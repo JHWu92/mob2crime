@@ -38,6 +38,7 @@ ADMIN_STR = lambda x, y: f'{PER_MUN_DISPLAY(x)}_{URB_ONLY_DISPLAY(y)}'
 
 
 def keep_hotspot(avg, hotspot_type='loubar'):
+    """keep_hotspot changes the avg itself"""
     for h in avg:
         arr = avg[h]
         # arr can be all 0, which would break the loubar method, and there is no hotspot
