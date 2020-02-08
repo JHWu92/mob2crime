@@ -17,6 +17,22 @@ PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 
+def interpolate_uni(tvors, su, tw_footfall, cache_path=None, verbose=0):
+    """
+    interpolate tower footfall to spatial units.
+    :param tvors: voronoi polygons
+    :param su: target spatial units
+    :param tw_footfall: 24 hour footfall, shape: [n_tower, 24 hours]
+    :param cache_path: if not None, cache t2su results to cache_path
+    :return: su_footfall, shape: [n_su, 24 hours]
+    """
+    t2su = gis.polys2polys(tvors, su, pname1='tower', pname2=su.index.name, verbose=verbose)
+    t2su = t2su[['tower', su.index.name, 'weight']].set_index(su.index.name)
+    # TODO: cache t2su if cache_path not None
+    su_footfall = interpolate_stats(tw_footfall, t2su, n_bins=tw_footfall.shape[1])
+    return su_footfall
+
+
 def interpolate_idw(tw_avg, side, per_mun=False, urb_only=False, max_k=10, grids=None, n_bins=24):
     per_mun_str = PER_MUN_STR(per_mun)
     if n_bins == 24:
