@@ -49,12 +49,34 @@ def country(to_4326=False):
     return ctry
 
 
-def municipalities(mun_ids=None, to_4326=False, load_pop=False):
+def municipalities(mun_ids=None, to_4326=False, load_pop=False, urb_only=False):
     mgm = gp.read_file(f'{DIR_CenGeo}/national_macro/mgm2010v5_0/municipios.shp')
     mgm['mun_id'] = mgm.CVE_ENT + mgm.CVE_MUN
     mgm = filter_mun_ids(mgm, mun_ids)
     mgm.set_index('mun_id', inplace=True)
-    if load_pop:
+
+    # if urb only, load urban localidad to retrieve the geometry
+    if urb_only:
+        # load urban localidads
+        mglus = locs_urban()
+        # merge locs to form locs area in muninicipalities
+        mgmus = []
+        for mid, lu in mglus.groupby('mun_id'):
+            # if has mun_ids filter and mid isn't of interest, pass
+            if mun_ids is not None and mid not in mun_ids:
+                continue
+            mgmus.append({
+                'mun_id': mid,
+                'geometry': cascaded_union(lu.geometry),
+                'pobtot': lu.pobtot.sum(),
+            })
+        mgmus = gp.GeoDataFrame(mgmus)
+        mgmus.crs = mex.crs
+        mgmus.set_index('mun_id', inplace=True)
+        mgm = mgmus.join(mgm[['CVE_ENT', 'CVE_MUN', 'NOM_MUN']])
+
+    # if not urb only, use the whole municipality polygon and load the population
+    elif load_pop:
         plr = census.pop_loc_rural()
         plu = census.pop_loc_urban()
         plr['mun_id'] = plr.entidad + plr.mun
