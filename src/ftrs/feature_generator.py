@@ -8,9 +8,10 @@ WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']
 HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']
 
 
-def get_city_features(db, admin_lvl, admin_id, boundary_type, su_type, intpl):
+def get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl):
     query = Query()
-    city = db.search((query.admin_id == admin_id)
+    city = db.search((query.country == country)
+                     & (query.admin_id == admin_id)
                      & (query.admin_lvl == admin_lvl)
                      & (query.boundary_type == boundary_type)
                      & (query.su_type == su_type) & (query.intpl == intpl))
@@ -41,9 +42,9 @@ def update_feature(db, new_city):
     db.write_back([new_city])
 
 
-def ftr_hs_scale(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
+def ftr_hs_scale(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
                  hotspot_type='loubar', su=None, hotspots_per_hour=None, redo=False):
-    city = get_city_features(db, admin_lvl, admin_id, boundary_type, su_type, intpl)
+    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     # if updated, new feature is computed, the doc in db needs update.
     updated = False
     # if not complete, no new feature can be computed
@@ -78,10 +79,10 @@ def ftr_hs_scale(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
     return city
 
 
-def ftr_compacity(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
+def ftr_compacity(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
                   hotspot_type='loubar', su=None, hotspots_per_hour=None,
                   city_area=None, redo=False):
-    city = get_city_features(db, admin_lvl, admin_id, boundary_type, su_type, intpl)
+    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     # if updated, new feature is computed, the doc in db needs update.
     updated = False
     # if not complete, no new feature can be computed
@@ -116,10 +117,10 @@ def ftr_compacity(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
     return city
 
 
-def ftr_compactness(db, admin_lvl, admin_id, boundary_type, su_type, intpl,
+def ftr_compactness(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
                     hotspot_type='loubar', raster_resolution=100, raster_use_p_centroid_if_none=False,
                     su=None, hotspots_per_hour=None, redo=False, verbose=0):
-    city = get_city_features(db, admin_lvl, admin_id, boundary_type, su_type, intpl)
+    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     feature_names = ['COHE', 'PROX', 'NMI', 'NMMI']
 
     # if update, new feature is computed, the doc in db needs update.
