@@ -8,7 +8,33 @@ WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']
 HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']
 
 
-def get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl):
+def filter_cities(db, admin_lvl, country=None, boundary_type=None, su_type=None, intpl=None):
+    """
+    filter cities by conditions. No condition on admin_id
+    :param db: TinyDB instance
+    :param admin_lvl: required
+    :param country: optional
+    :param boundary_type: optional
+    :param su_type: optional
+    :param intpl: optional
+    :return: list of cities
+    """
+    query = Query()
+    cond = (query.admin_lvl == admin_lvl)
+    if country is not None:
+        cond &= (query.country == country)
+    if boundary_type is not None:
+        cond &= (query.boundary_type == boundary_type)
+    if su_type is not None:
+        cond &= (query.su_type == su_type)
+    if intpl is not None:
+        cond &= (query.intpl == intpl)
+
+    cities = db.search(cond)
+    return cities
+
+
+def get_city_in_db(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl):
     query = Query()
     city = db.search((query.country == country)
                      & (query.admin_id == admin_id)
@@ -18,6 +44,7 @@ def get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, 
     if len(city) == 0:
         # if there is no record
         city_id = db.insert({
+            'country': country,
             'admin_lvl': admin_lvl,
             'admin_id': admin_id,
             'boundary_type': boundary_type,
@@ -32,7 +59,7 @@ def get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, 
     else:
         raise ValueError(
             f'has multiple records for city with '
-            f'admin_lvl={admin_lvl}, admin_id={admin_id}, '
+            f'country={country}, admin_lvl={admin_lvl}, admin_id={admin_id}, '
             f'boundary_type={boundary_type}, su_type={su_type}, intpl={intpl}')
     return city
 
@@ -44,7 +71,7 @@ def update_feature(db, new_city):
 
 def ftr_hs_scale(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
                  hotspot_type='loubar', su=None, hotspots_per_hour=None, redo=False):
-    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
+    city = get_city_in_db(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     # if updated, new feature is computed, the doc in db needs update.
     updated = False
     # if not complete, no new feature can be computed
@@ -82,7 +109,7 @@ def ftr_hs_scale(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl
 def ftr_compacity(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
                   hotspot_type='loubar', su=None, hotspots_per_hour=None,
                   city_area=None, redo=False):
-    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
+    city = get_city_in_db(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     # if updated, new feature is computed, the doc in db needs update.
     updated = False
     # if not complete, no new feature can be computed
@@ -118,15 +145,18 @@ def ftr_compacity(db, country, admin_lvl, admin_id, boundary_type, su_type, intp
 
 
 def ftr_compactness(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl,
-                    hotspot_type='loubar', raster_resolution=100, raster_use_p_centroid_if_none=False,
-                    su=None, hotspots_per_hour=None, redo=False, verbose=0):
-    city = get_city_features(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
+                    hotspot_type='loubar', raster_resolution=100, raster_use_p_centroid_if_none=True,
+                    su=None, hotspots_per_hour=None, redo=False, verbose=0, hourly=True):
+    # TODO: raster_resolution isn't stored in the database.
+    #  Because it is unlikely to tune this parameter
+
+    city = get_city_in_db(db, country, admin_lvl, admin_id, boundary_type, su_type, intpl)
     feature_names = ['COHE', 'PROX', 'NMI', 'NMMI']
 
     # if update, new feature is computed, the doc in db needs update.
     update = False
 
-    feature_set_name = f'hs-{hotspot_type}-rs-{raster_resolution}'
+    feature_set_name = f'hs-{hotspot_type}'
     if feature_set_name not in city['features']:
         # this set of feature hasn't been computed
         features = {}
@@ -160,42 +190,43 @@ def ftr_compactness(db, country, admin_lvl, admin_id, boundary_type, su_type, in
 
     for time_range_name, index in [('all_day', permanent_index), ('home_hour', permanent_index_home),
                                    ('work_hour', permanent_index_work)]:
+        if verbose: print(f'time_range: {time_range_name}, n_hotspots: {len(index)}')
+        # if len(index)==0, prep is {key: None} and all features is None
         prep = preparation_for_compactness(su.loc[index], average_footfall.loc[index],
-                                           raster_resolution, raster_use_p_centroid_if_none, verbose)
-        if 'COHE' not in features or redo:
-            features['COHE'][time_range_name] = comp_index.cohesion(prep['ref_circle_radius'],
-                                                                    prep['pairwise_dist_square_avg'])
+                                           raster_resolution, raster_use_p_centroid_if_none,
+                                           verbose)
 
-        if 'PROX' not in features or redo:
-            features['PROX'][time_range_name] = comp_index.proximity(prep['ref_circle_radius'], prep['d2centroid_avg'])
+        features['COHE'][time_range_name] = comp_index.cohesion(prep['ref_circle_radius'],
+                                                                prep['pairwise_dist_square_avg'])
 
-        if 'NMI' not in features or redo:
-            features['NMI'][time_range_name] = comp_index.moment_inertia(prep['su_rasterized'].Area, prep['d2centroid'])
+        features['PROX'][time_range_name] = comp_index.proximity(prep['ref_circle_radius'],
+                                                                 prep['d2centroid_avg'])
 
-        if 'NMMI' not in features or redo:
-            features['NMMI'][time_range_name] = comp_index.mass_moment_inertia(prep['su_rasterized'],
-                                                                               prep['d2mass_centroid'])
+        features['NMI'][time_range_name] = comp_index.moment_inertia(prep['su_rasterized_area'],
+                                                                     prep['d2centroid'])
 
-    for hour in hotspots_per_hour:
-        hs_hourly = hotspots_per_hour[hour]
-        hs_index_hourly = hs_hourly[hs_hourly != 0].index
-        prep = preparation_for_compactness(su.loc[hs_index_hourly],
-                                           hs_hourly.loc[hs_index_hourly],
-                                           raster_resolution,
-                                           raster_use_p_centroid_if_none, verbose)
-        if 'COHE' not in features or redo:
-            features['COHE']['hourly'].append(comp_index.cohesion(prep['ref_circle_radius'],
-                                                                  prep['pairwise_dist_square_avg']))
+        features['NMMI'][time_range_name] = comp_index.mass_moment_inertia(prep['su_rasterized'],
+                                                                           prep['d2mass_centroid'])
+    if hourly:
+        for hour in hotspots_per_hour:
+            hs_hourly = hotspots_per_hour[hour]
+            hs_index_hourly = hs_hourly[hs_hourly != 0].index
+            if verbose: print(f'hour: {hour}, n_hotspots: {len(hs_index_hourly)}')
+            prep = preparation_for_compactness(su.loc[hs_index_hourly],
+                                               hs_hourly.loc[hs_index_hourly],
+                                               raster_resolution,
+                                               raster_use_p_centroid_if_none, verbose)
+            ind = comp_index.cohesion(prep['ref_circle_radius'], prep['pairwise_dist_square_avg'])
+            features['COHE']['hourly'].append({'hour': hour, 'value': ind})
 
-        if 'PROX' not in features or redo:
-            features['PROX']['hourly'].append(comp_index.proximity(prep['ref_circle_radius'], prep['d2centroid_avg']))
+            ind = comp_index.proximity(prep['ref_circle_radius'], prep['d2centroid_avg'])
+            features['PROX']['hourly'].append({'hour': hour, 'value': ind})
 
-        if 'NMI' not in features or redo:
-            features['NMI']['hourly'].append(comp_index.moment_inertia(prep['su_rasterized'].Area, prep['d2centroid']))
+            ind = comp_index.moment_inertia(prep['su_rasterized_area'], prep['d2centroid'])
+            features['NMI']['hourly'].append({'hour': hour, 'value': ind})
 
-        if 'NMMI' not in features or redo:
-            features['NMMI']['hourly'].append(comp_index.mass_moment_inertia(prep['su_rasterized'],
-                                                                             prep['d2mass_centroid']))
+            ind = comp_index.mass_moment_inertia(prep['su_rasterized'], prep['d2mass_centroid'])
+            features['NMMI']['hourly'].append({'hour': hour, 'value': ind})
 
     city['features'][feature_set_name] = features
     update_feature(db, city)
@@ -204,9 +235,30 @@ def ftr_compactness(db, country, admin_lvl, admin_id, boundary_type, su_type, in
 
 
 def preparation_for_compactness(su, footfall, raster_resolution, raster_use_p_centroid_if_none, verbose=0):
+    if len(su) == 0:
+        return {
+            'su_rasterized': None,
+            'su_rasterized_area': None,
+            'ref_circle_radius': None,
+            'pairwise_dist_square_avg': None,
+            'd2centroid_avg': None,
+            'd2centroid': None,
+            'd2mass_centroid': None
+        }
+
     su_rasterized = gis.gp_polys_to_raster_centroids(
         su, side=raster_resolution, pname=su.index.name,
         use_p_centroid_if_none=raster_use_p_centroid_if_none)
+
+    # if the resolution is large and on average rasterio return only <= 1 centroid per su,
+    # (possibly 0 for a su if raster_use_p_centroid_if_none==False)
+    # reduce the resolution to 1/10 of the original resolution
+    if len(su_rasterized) / len(su) <= 1:
+        raster_resolution = int(raster_resolution / 10)
+        su_rasterized = gis.gp_polys_to_raster_centroids(
+            su, side=raster_resolution, pname=su.index.name,
+            use_p_centroid_if_none=raster_use_p_centroid_if_none)
+
     if verbose:
         print(f'raster {len(su)} hot spots with resolution: {raster_resolution}m into {len(su_rasterized)} grids')
 
@@ -239,6 +291,7 @@ def preparation_for_compactness(su, footfall, raster_resolution, raster_use_p_ce
 
     return {
         'su_rasterized': su_rasterized,
+        'su_rasterized_area': su_rasterized.Area,
         'ref_circle_radius': ref_circle_radius,
         'pairwise_dist_square_avg': pairwise_dist_square_avg,
         'd2centroid_avg': d2centroid_avg,
