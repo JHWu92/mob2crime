@@ -463,6 +463,10 @@ def polys_centroid_pairwise_dist(polys, dist_crs, cur_crs=None, largest_len=4000
 def pairwise_dist_average(vec, square=True):
     # Vec is a n*2 np array
     n = len(vec)
+    if n == 0:
+        return None
+    if n == 1:
+        return 0
     s = 0
     for i in range(n):
         for j in range(i + 1, n):
