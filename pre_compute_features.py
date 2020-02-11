@@ -54,8 +54,9 @@ def get_su_footfall(towers_vor, su, tw_footfall, intpl, pop_units=None, cache_pa
     return su_footfall
 
 
-def main_municipality(debug=False):
-    db_path = const.feature_db
+def main_municipality(db_path=None, debug=False):
+    if db_path is None:
+        db_path = const.feature_db
     if debug:
         db_path = 'test_pre_compute_feature_db.json'
     db = TinyDB(db_path)
@@ -72,6 +73,7 @@ def main_municipality(debug=False):
 
     print(f'settings: country={country}, admin_lvl={admin_lvl}, boundary_type={boundary_type}, '
           f'su_type={su_type}, interpolation={intpl}, hs_types={hs_types}')
+    print(f'db_path={db_path}')
 
     # for compactness indices
     raster_resolution = 100
@@ -139,10 +141,11 @@ def main_municipality(debug=False):
                                     raster_use_p_centroid_if_none=raster_use_p_centroid_if_none,
                                     su=su, hotspots_per_hour=hotspots_per_hour, redo=redo, verbose=0)
         end_time = datetime.datetime.now()
-        print(f' ~ {end_time} = {begin_time - end_time}')
+        print(f' ~ {end_time} = {end_time - begin_time}')
 
 
 if __name__ == "__main__":
     debug = False
     print('running debug =', debug)
-    main_municipality(debug)
+    db_path = 'data/features_database_tmp.json'
+    main_municipality(db_path=db_path, debug=debug)
