@@ -110,8 +110,12 @@ def locs_rural(mun_ids=None, loc_ids=None, to_4326=False, buffer_point=500, mglr
     # mglr in this file has only (lat,lon) points
     if not mglr_only:
         mgar_pls = _agebs_mzas('Rural', 'Ageb', mun_ids, loc_ids, to_4326, verbose)
-        not_valid = mgar_pls.geometry.apply(lambda x: x.is_valid)
-        mgar_pls.loc[mgar_pls[~not_valid.values].index, 'geometry'] = mgar_pls[~not_valid].geometry.buffer(0)
+        if len(mgar_pls):
+            not_valid = mgar_pls.geometry.apply(lambda x: x.is_valid)
+            mgar_pls.loc[mgar_pls[~not_valid.values].index, 'geometry'] = mgar_pls[~not_valid].geometry.buffer(0)
+        else:
+            # meaning there isn't any mgar_pls
+            mglr_only = True
 
     mglr_pts = gp.read_file(f'{DIR_CenGeo}/national_macro/mglr2010v5_0/localidades_rurales.shp')
     mglr_pts['mun_id'] = mglr_pts.CVE_ENT + mglr_pts.CVE_MUN
