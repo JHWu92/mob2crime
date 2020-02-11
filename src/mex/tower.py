@@ -36,7 +36,7 @@ def pts(to_4326=False):
     return towers_shp
 
 
-def voronoi(to_4326=False):
+def voronoi(to_4326=False, load_pop=False):
     fn = f'{DIR_INTPL}/voronoi.geojson'
 
     if os.path.exists(fn):
@@ -57,9 +57,44 @@ def voronoi(to_4326=False):
 
     tvor.crs = mex.crs
     tvor.set_index('gtid', inplace=True)
+    if load_pop:
+        tvor_pop = voronoi_pop_by_ageb()
+        tvor = tvor.join(tvor_pop)
     if to_4326:
         tvor = tvor.to_crs(epsg=4326)
     return tvor
+
+
+def voronoi_pop_by_ageb():
+    fn = f'{DIR_INTPL}/voronoi_pop_by_ageb.csv'
+
+    if os.path.exists(fn):
+        tvor_pop = pd.read_csv(fn).set_index('gtid')
+        print(f'loading existing mexico tower voronoi population file: {fn}')
+
+    else:
+        towers_vor = voronoi(load_pop=False)
+        agebs = region.agebs()
+        t2a = gis.polys2polys(towers_vor, agebs, 'gtid', 'ageb', area_crs=mex.crs, intersection_only=False)
+        t2a = t2a.merge(agebs[['pobtot']], left_on='ageb', right_index=True)
+
+        # ageb area is the sum area covered by towers
+        # in case ageb' polgyons are not exactly the same as the official map (happens for localidads)
+        # also, the points are bufferred, which adds fake areas.
+        ageb_area = t2a.groupby('ageb').iarea.sum()
+        ageb_area.name = 'ageb_area'
+        t2a = t2a.drop(['ageb_area', 'weight'], axis=1).merge(ageb_area.to_frame(), left_on='ageb', right_index=True)
+
+        # iPop is the population of the intersected area between a tower and a ageb
+        # within a ageb, the population is assumed to be distributed evenly over space
+        # therefore the population is divided proportionally to the intersection area
+        # area of intersection / area of ageb * pop of ageb
+        t2a['Pop'] = t2a.iarea / t2a.ageb_area * t2a.pobtot
+
+        tvor_pop = t2a.groupby('tower').Pop.sum().to_frame().reindex(towers_vor.index, fill_value=0)
+        tvor_pop.to_csv(fn)
+
+    return tvor_pop
 
 
 def pts_x_region(rkind, per_mun=False, urb_only=False):
