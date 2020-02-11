@@ -17,6 +17,62 @@ PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 
+def get_pop_s(shp, pop_units):
+    s2p = gis.polys2polys(pop_units, shp, pop_units.index.name, shp.index.name, area_crs=mex.crs,
+                          intersection_only=False)
+
+    s2p = s2p.merge(pop_units[['pobtot']], left_on=pop_units.index.name, right_index=True)
+
+    # there could be pop_units just touch on the border, to avoid bug in the next step, filter this first
+    s2p = s2p[s2p.weight > .0001].copy()
+
+    # pu area is the sum area appearing in the s2p
+    # in case pu' polgyons are not exactly the same as the official map (happens for localidads)
+    # also, the points are bufferred, which adds fake areas and can be used multiple times
+    pu_used_area = s2p.groupby(pop_units.index.name).iarea.sum()
+    pu_used_area.name = pop_units.index.name + '_area'
+    s2p = s2p.drop([pop_units.index.name + '_area', 'weight'], axis=1).merge(pu_used_area.to_frame(),
+                                                                             left_on=pop_units.index.name,
+                                                                             right_index=True)
+
+    # Pop is the population of the intersected area between a shape and a pop_unit
+    # within a pop_unit, the population is assumed to be distributed evenly over space
+    # therefore the population is divided proportionally to the intersection area
+    # area of intersection / area of pop_unit * pop of pop_unit
+    s2p['Pop'] = s2p.iarea / s2p[pop_units.index.name + '_area'] * s2p.pobtot
+
+    s_pop = s2p.groupby(shp.index.name).Pop.sum().to_frame().reindex(shp.index, fill_value=0)
+    return s_pop
+
+
+def interpolate_pop(tvors, su, pop_units, tw_footfall, cache_path=None, verbose=0):
+    """
+    interpolate tower footfall to spatial units proportional to population
+    :param tvors: tower voronoi polygons
+    :param su: target spatial units
+    :param pop_units: the units(ageb in Mex) with population.
+                      To avoid units outside admin_boundary but intersects,
+                      filter them out first: country_pu.loc[admin_pu]
+    :param tw_footfall: tower footfall, shape: [n_tower, 24 hours]
+    :param cache_path:
+    :param verbose:
+    :return: su_footfall, shape : [n_su, 24 hours]
+    """
+
+    su_name = su.index.name
+    # intersecting tvors and su
+    t2su = gis.polys2polys(tvors, su, 'tower', su_name, verbose=verbose)[['tower', su_name, 'geometry']]
+    # get population for each intersection
+    t2su_intxn_pop = get_pop_s(t2su, pop_units)
+    # get t2su proportional to population
+    t2su = t2su.join(t2su_intxn_pop)
+    t2su = t2su.merge(tvors[['Pop']], left_on='tower', right_index=True, suffixes=('_intxn', '_tower'))
+    t2su['weight'] = t2su.Pop_intxn / t2su.Pop_tower
+    t2su = t2su[['tower', su.index.name, 'weight']].set_index(su.index.name)
+    su_footfall = interpolate_stats(tw_footfall, t2su, n_bins=tw_footfall.shape[1])
+    return su_footfall
+
+
 def interpolate_uni(tvors, su, tw_footfall, cache_path=None, verbose=0):
     """
     interpolate tower footfall to spatial units.
