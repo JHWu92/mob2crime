@@ -17,9 +17,9 @@ PER_MUN_STR = lambda per_mun: 'perMun' if per_mun else 'whole'
 URB_ONLY_STR = lambda urb_only: 'urb' if urb_only else 'uNr'
 
 
-def get_pop_s(shp, pop_units):
-    s2p = gis.polys2polys(pop_units, shp, pop_units.index.name, shp.index.name, area_crs=mex.crs,
-                          intersection_only=False)
+def get_pop_s(shp, pop_units, verbose=0):
+    s2p = gis.polys2polys(pop_units, shp, pop_units.index.name, shp.index.name,
+                          area_crs=mex.crs, intersection_only=False, verbose=verbose)
 
     s2p = s2p.merge(pop_units[['pobtot']], left_on=pop_units.index.name, right_index=True)
 
@@ -62,8 +62,10 @@ def interpolate_pop(tvors, su, pop_units, tw_footfall, cache_path=None, verbose=
     su_name = su.index.name
     # intersecting tvors and su
     t2su = gis.polys2polys(tvors, su, 'tower', su_name, verbose=verbose)[['tower', su_name, 'geometry']]
+    t2su.crs = tvors.crs
+    t2su.index.name = f'tower_{su_name}'
     # get population for each intersection
-    t2su_intxn_pop = get_pop_s(t2su, pop_units)
+    t2su_intxn_pop = get_pop_s(t2su, pop_units, verbose)
     # get t2su proportional to population
     t2su = t2su.join(t2su_intxn_pop)
     t2su = t2su.merge(tvors[['Pop']], left_on='tower', right_index=True, suffixes=('_intxn', '_tower'))
