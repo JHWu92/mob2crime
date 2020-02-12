@@ -14,7 +14,7 @@ import src.tower_interpolation as tw_int
 import src.utils.gis as gis
 
 
-def get_su(su_type, admin_lvl, admin_id, admin_shape, crs=None):
+def get_su(su_type, admin_lvl, admin_id, admin_shape, crs=None, urb_only=False):
     if su_type.startswith('grid'):
         index_name, grid_side = su_type.split('-')
         grid_side = int(grid_side)
@@ -23,6 +23,13 @@ def get_su(su_type, admin_lvl, admin_id, admin_shape, crs=None):
         su[admin_lvl] = admin_id
         su.crs = crs
         su.index.name = index_name
+    elif su_type == 'ageb':
+        if admin_lvl == 'mun_id':
+            su = region.agebs(mun_ids=[admin_id])
+            if urb_only:
+                su = su[su.Type == 'Urban'].copy()
+        else:
+            raise NotImplementedError(f'su_type=ageb, admin_lvl={admin_lvl} not implemented')
     else:
         raise NotImplementedError(f'su_type="{su_type}" not Implemented')
     return su
@@ -54,7 +61,7 @@ def get_su_footfall(towers_vor, su, tw_footfall, intpl, pop_units=None, cache_pa
     return su_footfall
 
 
-def main_municipality(db_path=None, debug=False):
+def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False):
     if db_path is None:
         db_path = const.feature_db
     if debug:
@@ -63,11 +70,8 @@ def main_municipality(db_path=None, debug=False):
 
     # define parameters
     country = 'Mex'
-    admin_lvl = 'mun_id'
-    boundary_type = 'Urban'
+    admin_lvl = 'mun_id'   
     urb_only = {'Urban': True, 'UrbanRural': False}[boundary_type]
-    su_type = 'grid-500'
-    intpl = 'Pop'
     # footfall hotspots related
     hs_types = ['loubar', 'average'][:1]
 
@@ -93,7 +97,7 @@ def main_municipality(db_path=None, debug=False):
 
     # load cell towers
     print('loading towers and polygons')
-    towers = mex_tower.pts().set_index('gtid')
+    # towers = mex_tower.pts().set_index('gtid')
     towers_vor = mex_tower.voronoi(load_pop=True)
     towers_vor_in_mgm = mex_tower.voronoi_x_region('mgm')
 
@@ -119,7 +123,7 @@ def main_municipality(db_path=None, debug=False):
             pop_units = mgas[mgas.mun_id.isin([admin_id])]
 
         city_area = munic.geometry.area
-        su = get_su(su_type, admin_lvl, mid, munic.geometry, mex_crs)
+        su = get_su(su_type, admin_lvl, mid, munic.geometry, mex_crs, urb_only=urb_only)
         tid_oi = towers_vor_in_mgm[towers_vor_in_mgm.mun_id == mid].gtid
 
         su_footfall = get_su_footfall(towers_vor.loc[tid_oi], su,
@@ -145,7 +149,22 @@ def main_municipality(db_path=None, debug=False):
 
 
 if __name__ == "__main__":
+    start = datetime.datetime.now()
     debug = False
     print('running debug =', debug)
+
+    settings = {
+        0: ('Urban', 'grid-500', 'Uni'),  # done
+        1: ('Urban', 'grid-500', 'Pop'),  # done
+        2: ('UrbanRural', 'grid-500', 'Uni'),  # running
+        3: ('Urban', 'ageb', 'Uni'),
+        4: ('Urban', 'ageb', 'Pop'),
+    }
+
+    boundary_type, su_type, intpl = settings[3]
+
     db_path = 'data/features_database_tmp.json'
-    main_municipality(db_path=db_path, debug=debug)
+    main_municipality(boundary_type, su_type, intpl, db_path=db_path, debug=debug)
+
+    end = datetime.datetime.now()
+    print(f'total: {start} ~ {end} = {end - start}')
