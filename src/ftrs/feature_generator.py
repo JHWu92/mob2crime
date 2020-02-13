@@ -8,6 +8,54 @@ WORK_HOURS = ['9', '10', '11', '12', '13', '14', '15', '16', '17']
 HOME_HOURS = ['0', '1', '2', '3', '4', '5', '6', '22', '23']
 
 
+def flat_ftr_hotspot(cities, perm_time_ranges=None, hourly=True, hotspot_types='loubar'):
+    """
+    flatten the features computed based on hotspots detection.
+    It doesn't distinguish boundary_type, su_type or intpl.
+    :param cities: cities in the database, loaded by filter_cities
+    :param perm_time_ranges: None, str or list,
+        one or more of ['all_day', 'home_hour', 'work_hour']
+        if None, per_time_ranges = all three
+    :param hourly: bool
+        whether or not to include hourly features
+    :param hotspot_types: str or list
+        the hotspots detection method(s) on which the ftrs are based
+    :return: list of dictionaries.
+    """
+    if isinstance(hotspot_types, str):
+        hotspot_types = [hotspot_types]
+    elif not isinstance(hotspot_types, (list, tuple)):
+        raise ValueError('hotspot_types should be one type of str, list or tuple')
+
+    if perm_time_ranges is None:
+        perm_time_ranges = ['all_day', 'home_hour', 'work_hour']
+    elif isinstance(perm_time_ranges, str):
+        if perm_time_ranges not in ['all_day', 'home_hour', 'work_hour']:
+            raise ValueError('perm_time_ranges should be one of [all_day, home_hour, work_hour]')
+        perm_time_ranges = [perm_time_ranges]
+    elif not isinstance(perm_time_ranges, (list, tuple)):
+        raise ValueError('perm_time_ranges should be one type of None, str, list or tuple')
+
+    flat_ftrs = []
+    for i, city in enumerate(cities):
+        # print(i, city['admin_id'])
+        flat_ftr = {city['admin_lvl']: city['admin_id']}
+        for hs_type in hotspot_types:
+            features = city['features'][f'hs-{hs_type}']
+            # add permanent hotspots indices
+            for fname, values in features.items():
+                for time_range in perm_time_ranges:
+                    flat_ftr[f'{hs_type}-{fname}-{time_range}'] = values[time_range]
+                # add hourly hotspots indices
+                if hourly:
+                    for item in values['hourly']:
+                        hour = item['hour']
+                        value = item['value']
+                        flat_ftr[f'{hs_type}-{fname}-hour{hour}'] = value
+        flat_ftrs.append(flat_ftr)
+    return flat_ftrs
+
+
 def filter_cities(db, admin_lvl, country=None, boundary_type=None, su_type=None, intpl=None):
     """
     filter cities by conditions. No condition on admin_id
