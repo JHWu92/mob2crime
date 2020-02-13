@@ -199,6 +199,8 @@ def _agebs_mzas(urb_or_rur, ageb_or_mza, mun_ids=None, loc_ids=None, to_4326=Fal
             continue
         ageb = gp.read_file(f'gzip://{DIR_CenGeo}/{urb_or_rur}{ageb_or_mza}/{mun_id}.geojson.gz')
         mg.append(ageb)
+    if len(mg)==0:
+        return mg
     mg = pd.concat(mg, ignore_index=True, sort=False)
 
     mg['CVE_ENT'] = mg.CVEGEO.apply(lambda x: x[:2])
