@@ -70,7 +70,7 @@ def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False):
 
     # define parameters
     country = 'Mex'
-    admin_lvl = 'mun_id'   
+    admin_lvl = 'mun_id'
     urb_only = {'Urban': True, 'UrbanRural': False}[boundary_type]
     # footfall hotspots related
     hs_types = ['loubar', 'average'][:1]
