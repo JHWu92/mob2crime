@@ -83,16 +83,24 @@ sesnsp_types_of_crimes = {
 }
 
 
-def get_crime_type(type_in_sesnsp, level=0):
+def _get_crime_type(type_in_sesnsp, level=0):
     return sesnsp_types_of_crimes[(type_in_sesnsp['MODALIDAD'], type_in_sesnsp['TIPO'], type_in_sesnsp['SUBTIPO'])][
         level]
 
 
 def sesnsp_crime_counts(year, type_level):
+    """
+    return the annual crime counts by type for each municipality
+    :param year: int, the year of crime counts
+    :param type_level: int, the level of types of crime
+        0: battery/assualt, burglary, etc. 9 types
+        1: violent or property. 2 types
+    :return: pd.DataFrame, each row per municipality
+    """
     sesnsp = pd.read_csv(f'{const.crime_dir}/IDM_mar19.csv', encoding='1252')
     sesnsp.INEGI = sesnsp.INEGI.apply(lambda x: f'{x:05}')
     crimes = sesnsp[sesnsp['AÑO'] == year].copy()
-    crimes['crime_type'] = crimes.apply(lambda x: get_crime_type(x, type_level), axis=1)
+    crimes['crime_type'] = crimes.apply(lambda x: _get_crime_type(x, type_level), axis=1)
     crimes['annual_count'] = crimes[
         ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE',
          'DICIEMBRE']].sum(axis=1)
