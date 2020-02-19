@@ -164,7 +164,7 @@ if __name__ == "__main__":
         1: ('Urban', 'grid-500', 'Pop'),  # done
         2: ('UrbanRural', 'grid-500', 'Uni'),  # Done
         3: ('Urban', 'ageb', 'Uni'),  # Done
-        4: ('Urban', 'ageb', 'Pop'),  # running
+        4: ('Urban', 'ageb', 'Pop'),  # Done
     }
 
     boundary_type, su_type, intpl = settings[4]
@@ -174,4 +174,4 @@ if __name__ == "__main__":
                       filter_mun_by_crime=filter_mun_by_crime)
 
     end = datetime.datetime.now()
-    print(f'total: {start} ~ {end} = {end - start}', boundary_type, su_type, intpl, filter_mun_by_crime)
+    print(f'total: {start} ~ {end} = {end - start}', boundary_type, su_type, intpl, 'filter_mun_by_crime =', filter_mun_by_crime)
