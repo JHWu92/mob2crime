@@ -1,13 +1,13 @@
+import datetime
+
+import pandas as pd
+from tinydb import TinyDB
+
+import src.exp.preprocessing as exp_prep
+import src.exp.sklearn_models as exp_sk
+import src.ftrs.feature_generator as fgen
 import src.mex.crime as mex_crime
 import src.mex.regions2010 as mex_region
-import src.ftrs.feature_generator as fgen
-from tinydb import TinyDB
-import pandas as pd
-import datetime
-import src.exp.sklearn_models as exp_sk
-import src.exp.preprocessing as exp_prep
-from sklearn.utils.testing import ignore_warnings
-from sklearn.exceptions import ConvergenceWarning
 
 
 def load_crime():
@@ -34,7 +34,6 @@ def load_feature(db_path, boundary_type, su_type, intpl, hourly=True, mun_ids=No
     return features
 
 
-@ignore_warnings(category=ConvergenceWarning)
 def train_eval_models(model_names, dataset, random_state=0,
                       random_search_cv=True, n_iter=10, cv=5, n_jobs=None,
                       verbose=0):
@@ -66,8 +65,8 @@ def experiments(debug=False, n_iter=40, n_jobs=4, verbose=0):
         4: ('Urban', 'ageb', 'Pop'),
     }
 
-    db_path = 'data/features_database.json'
-    boundary_type, su_type, intpl = settings[2]
+    db_path = 'data/features_database_tmp.json'
+    boundary_type, su_type, intpl = settings[3]
     # scaling = 'RobustScaler'
     scaling = 'StandardScaler'
     print(f'boundary_type={boundary_type}, su_type={su_type}, interpolation={intpl}, scaling={scaling}')
@@ -109,4 +108,18 @@ def experiments(debug=False, n_iter=40, n_jobs=4, verbose=0):
 
 
 if __name__ == '__main__':
+    import sys
+    import warnings
+    import os
+
+    from sklearn.exceptions import ConvergenceWarning
+
+    # from sklearn.utils.testing import ignore_warnings
+    # ConvergenceWarning('ignore')
+    # warnings.filterwarnings('ignore', category=ConvergenceWarning)
+
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore", category=(ConvergenceWarning, UserWarning))
+        os.environ["PYTHONWARNINGS"] = "ignore"  # Also affect subprocesses
+
     experiments(debug=False, verbose=1)
