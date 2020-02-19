@@ -1,9 +1,11 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.stats import spearmanr, kendalltau, pearsonr
 from sklearn import linear_model, svm, tree, ensemble, neural_network
+# from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import mean_absolute_error, mean_squared_error, explained_variance_score, r2_score
 from sklearn.model_selection import RandomizedSearchCV
+# from sklearn.utils.testing import ignore_warnings
 
 import src.exp.parameters_space as param_space
 
@@ -84,6 +86,7 @@ def regression_scoring(true, pred, prefix=''):
     }
 
 
+# @ignore_warnings(category=ConvergenceWarning)
 def train_regressor(model_name, train_x, train_y, random_state=None, random_search_cv=False,
                     n_iter=10, cv=5, n_jobs=2, verbose=0):
     if model_name in ('ols', 'SVR'):
