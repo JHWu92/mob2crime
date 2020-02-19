@@ -1,5 +1,5 @@
 import datetime
-
+import src.mex.crime as mex_crime
 import geopandas as gp
 import pandas as pd
 from tinydb import TinyDB
@@ -61,7 +61,7 @@ def get_su_footfall(towers_vor, su, tw_footfall, intpl, pop_units=None, cache_pa
     return su_footfall
 
 
-def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False):
+def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False, filter_mun_by_crime=False):
     if db_path is None:
         db_path = const.feature_db
     if debug:
@@ -95,12 +95,18 @@ def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False):
     mgm = region.municipalities(load_pop=True, urb_only=urb_only)
     mex_crs = mgm.crs
 
+    if filter_mun_by_crime:
+        print('loading crimes data')
+        crimes = mex_crime.sesnsp_crime_counts(2011, 1)
+        mun_ids_with_data = sorted(set(crimes.index) & set(mgm.index))
+        mgm = mgm.loc[mun_ids_with_data]
+    print(f'total number of mgm: {len(mgm)}, filter_by_crime={filter_mun_by_crime}')
+
     # load cell towers
     print('loading towers and polygons')
     # towers = mex_tower.pts().set_index('gtid')
     towers_vor = mex_tower.voronoi(load_pop=True)
     towers_vor_in_mgm = mex_tower.voronoi_x_region('mgm')
-
     # load cached tower average footfall
     # if average_over_observed_day==False
     # average over the number of days in the observation period
@@ -151,20 +157,21 @@ def main_municipality(boundary_type, su_type, intpl, db_path=None, debug=False):
 if __name__ == "__main__":
     start = datetime.datetime.now()
     debug = False
-    print('running debug =', debug)
-
+    filter_mun_by_crime = True
+    print('running debug =', debug, 'filter_mun_by_crime =', filter_mun_by_crime)
     settings = {
         0: ('Urban', 'grid-500', 'Uni'),  # done
         1: ('Urban', 'grid-500', 'Pop'),  # done
-        2: ('UrbanRural', 'grid-500', 'Uni'),  # running
-        3: ('Urban', 'ageb', 'Uni'),
-        4: ('Urban', 'ageb', 'Pop'),
+        2: ('UrbanRural', 'grid-500', 'Uni'),  # Done
+        3: ('Urban', 'ageb', 'Uni'),  # Done
+        4: ('Urban', 'ageb', 'Pop'),  # running
     }
 
-    boundary_type, su_type, intpl = settings[3]
+    boundary_type, su_type, intpl = settings[4]
 
     db_path = 'data/features_database_tmp.json'
-    main_municipality(boundary_type, su_type, intpl, db_path=db_path, debug=debug)
+    main_municipality(boundary_type, su_type, intpl, db_path=db_path, debug=debug,
+                      filter_mun_by_crime=filter_mun_by_crime)
 
     end = datetime.datetime.now()
-    print(f'total: {start} ~ {end} = {end - start}')
+    print(f'total: {start} ~ {end} = {end - start}', boundary_type, su_type, intpl, filter_mun_by_crime)
