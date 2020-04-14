@@ -25,7 +25,7 @@ models_hyperparam_space = {
     'GDBreg': param_space.sk_gradient_boost,
     'SVR': param_space.sk_svr,
     'linearSVR': param_space.sk_linear_svr,
-    'XGBreg': {},
+    'XGBreg': param_space.params_xgb,
 }
 
 

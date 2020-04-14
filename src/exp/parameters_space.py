@@ -32,6 +32,24 @@ gamma_s = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
 learning_rate = [1.e-05, 1.e-04, 1.e-03, 1.e-02, 1.e-01, 1.]
 max_depth = [None, 3, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
+params_xgb = {
+    'booster': ['dart', 'gbtree'],
+    'verbosity': [0],
+    'n_jobs': [1],
+
+    # related to conservative/overfit
+    'learning_rate': learning_rate,
+    'gamma': [0, 1, 10, 50, 100, 200, 1000],
+    'max_depth': max_depth,
+    'min_child_weight': [0, 1, 10, 50, 100, 200, 1000],
+    'subsample': [0.1, 0.2, 0.3, 0.5, 0.8],
+    'colsample_bytree': [0.2, 0.4, 0.6, 0.8, 1.0],
+    'n_estimators': n_estimators
+    # maybe for booster=gblinear only
+    # 'reg_lambda': [0.1, 1.0, 10.0, 100.],
+    # 'reg_alpha': [0.1, 1, 10., 100.],
+}
+
 sk_adaboost = {
     'n_estimators': n_estimators,
     'learning_rate': learning_rate,
