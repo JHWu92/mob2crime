@@ -33,3 +33,53 @@ def pop_loc_urban():
     pop_mglu = pop_mgau.groupby(['entidad', 'mun', 'loc']).pobtot.sum().reset_index()
     pop_mglu['loc_id'] = pop_mglu.entidad + pop_mglu.mun + pop_mglu['loc']
     return pop_mglu
+
+
+def poverty_munic(kind='all', rate=True):
+    """if rate, return percentage"""
+    kinds = ['poverty', 'lack_food', 'poverty_lack_food']
+    if kind == 'all':
+        kind = kinds
+    else:
+        assert kind in kinds
+        kind = [kind]
+
+    if rate:
+        kind = [k + '_rate' for k in kind]
+    else:
+        kind = [k + '_pop' for k in kind]
+
+    df = pd.read_excel(
+        'data/mexico/geography-socioeconomics/poverty-lack-food-2010.xlsx',
+        dtype={
+            'CVE_ENT': str,
+            'CVE_MUN': str
+        })
+    df = df.set_index('CVE_MUN')
+    df.index.name = 'mun_id'
+    return df[kind]
+
+
+def econ_active_unoccupied(rate=True):
+    """if rate, return percentage"""
+    df = pd.read_excel(
+        'data/mexico/geography-socioeconomics/econ-active-population-2010.xlsx',
+        dtype={
+            'CVE_MUN': str
+        }).set_index('CVE_MUN')
+    df.index.name = 'mun_id'
+    if rate:
+        df['active_unoccupied'] = df['active_unoccupied'] / df['active_total']
+    return df[['active_unoccupied']] * 100
+
+
+def income_indigenous_group():
+    """return df with columns:
+    aver_income: average income,
+    PI_type: type of municipality by Population of Indigenous
+    """
+
+    df = pd.read_excel('data/mexico/geography-socioeconomics/income-indigenous-group-2010.xlsx',
+                       dtype={'CVE_MUN': str}).set_index('CVE_MUN')
+    df.index.name = 'mun_id'
+    return df[['aver_income', 'PI_type']]
