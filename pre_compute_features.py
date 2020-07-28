@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     boundary_type, su_type, intpl = settings[4]
 
-    db_path = 'data/features_database_tmp.json'
+    db_path = 'data/features_database.json'
     main_municipality(boundary_type, su_type, intpl, db_path=db_path, debug=debug,
                       filter_mun_by_crime=filter_mun_by_crime)
 
