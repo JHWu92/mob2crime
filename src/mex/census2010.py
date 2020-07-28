@@ -83,3 +83,36 @@ def income_indigenous_group():
                        dtype={'CVE_MUN': str}).set_index('CVE_MUN')
     df.index.name = 'mun_id'
     return df[['aver_income', 'PI_type']]
+
+
+def munic_census():
+    """
+    rate: the percentage (a/b*100)
+    ratio: a/b
+    """
+
+    cen = pd.read_csv(
+        'data/mexico/geography-socioeconomics/2010Census/National_loc_level/conjunto_de_datos/iter_00_cpv2010.csv',
+        dtype={'entidad': str, 'mun': str, 'loc': str})
+
+    cen = cen[(cen.entidad != '00') & (cen.mun != '000') & (cen['loc'] == '0000')].copy()
+    cen['mun_id'] = cen.entidad + cen.mun
+
+    cen['female_rate'] = cen.pobfem.astype(int) / cen.pobtot * 100
+    cen['male_to_female_ratio'] = cen.rel_h_m.astype(float) / 100
+
+    cen['female_headed_household_rate'] = cen.phogjef_f.astype(int) / cen.pobhog.astype(int) * 100
+    cen['male_to_female_household_ratio'] = cen.phogjef_m.astype(int) / cen.phogjef_f.astype(int)
+
+    cen['adult_rate'] = cen.p_18ymas.astype(int) / cen.pobtot * 100
+    cen['nev_mar_rate'] = cen.p12ym_solt.astype(int) / cen.p_12ymas.astype(int) * 100
+
+    cen['foreign_ent_rate'] = cen.pnacoe.astype(int) / (cen.pnacoe.astype(int) + cen.pnacent.astype(int)) * 100
+
+    cen['no_spanish_rate'] = cen.p3hlinhe.astype(int) / cen.pobtot * 100
+
+    cen = cen[['mun_id',
+               'female_rate', 'male_to_female_ratio', 'female_headed_household_rate', 'male_to_female_household_ratio',
+               'adult_rate', 'nev_mar_rate', 'foreign_ent_rate', 'no_spanish_rate',
+               ]].set_index('mun_id')
+    return cen
