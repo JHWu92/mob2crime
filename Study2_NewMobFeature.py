@@ -1,52 +1,30 @@
 # coding: utf-8
 
-import pandas as pd
-import json
-import gzip
-import numpy as np
-import geopandas as gp
-import sys
-from collections import defaultdict
-import glob
 import datetime
 import gc
-
+import glob
+import gzip
+import json
 import logging
-import src.mex.tower as mex_tower
+from collections import defaultdict
+
+import geopandas as gp
+import numpy as np
+import pandas as pd
+
 import src.mex.regions2010 as mex_region
+import src.mex.tower as mex_tower
 
-logging.basicConfig(filename="logs/Study2_NewMobFeature.log", level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-logging.info('===============================')
-logging.info('Starting Study2_NewMobFeatures v1. ')
-logging.info('skip individual mob_ftr bc it is done. This time for munic_flow only')
-print('skip individual mob_ftr bc it is done. This time for munic_flow only')
+version = 'v2'
+version_info = 'Do not filter user by thres in this script'
 debug = False
-logging.info(f'Debug: {debug}')
 debug_str = '-debug' if debug else ''
 
-
-def get_size(obj, seen=None):
-    """Recursively finds size of objects"""
-    size = sys.getsizeof(obj)
-    if seen is None:
-        seen = set()
-    obj_id = id(obj)
-    if obj_id in seen:
-        return 0
-    # Important mark as seen *before* entering recursion to gracefully handle
-    # self-referential objects
-    seen.add(obj_id)
-    if isinstance(obj, dict):
-        size += sum([get_size(v, seen) for v in obj.values()])
-        size += sum([get_size(k, seen) for k in obj.keys()])
-    elif hasattr(obj, '__dict__'):
-        size += get_size(obj.__dict__, seen)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
-        size += sum([get_size(i, seen) for i in obj])
-    return size
-
+logging.basicConfig(filename=f"logs/Study2_NewMobFeature-{version}{debug_str}.log", level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.info('===============================')
+logging.info(f'Starting Study2_NewMobFeatures {version}. {version_info}. Debug: {debug}')
+print(f'Starting Study2_NewMobFeatures {version}. {version_info}. Debug: {debug}')
 
 tower_vor = mex_tower.voronoi()
 
@@ -64,9 +42,6 @@ c_ = np.log10((10 ** b - 10 ** a) * c + 10 ** a)
 
 perimeter = perimeter.reset_index()
 perimeter['c_factor'] = c_
-
-# In[6]:
-
 
 tower_pts = mex_tower.pts()
 tower_pts = tower_pts.merge(perimeter)
@@ -98,18 +73,12 @@ for t, gt in t2gt.items():
 
 fns = glob.glob('stats/AggMexTwDyHrUnqUsrVOZ/*.json.gz')
 
-# In[9]:
-
-
 dates = sorted([fn.split('/')[-1][:-8] for fn in fns])
 if debug:
-    dates = dates[:10]
+    dates = dates[:3]
 
 
 # # count user's presents in municipalities and towers
-
-# In[10]:
-
 
 def add(d, k1, k2):
     if k1 not in d:
@@ -123,8 +92,7 @@ def add(d, k1, k2):
 
 # ## count users with night time activities first
 # 
-# filter users with home activities first
-# filter users with home activities above a threshold: at least 1 call every two days at night
+# filter users with at least 1 night activities first
 # then count activities through out the day
 
 # In[11]:
@@ -163,77 +131,71 @@ def update_single_count(agg, count, kind='gtid', uid_set=None):
             add(count, uid, munic_id)
 
 
-# In[17]:
-
-
+# =======================================
 # Get user home municipalities
-# [user][munic_id]=count
-night_mun_count = {}
-
+print('getting user home municipalities')
+logging.info('getting user home municipalities')
+night_mun_count = {}  # [user][munic_id]=count
 start = datetime.datetime.now()
-for date in dates:
+for i, date in enumerate(dates):
     path = f'stats/AggMexTwDyHrUnqUsrVOZ/{date}.json.gz'
     data = json.load(gzip.open(path))
     for subdate, agg in data.items():
         update_single_count(agg, night_mun_count, kind='home')
     time_spent = (datetime.datetime.now() - start).total_seconds()
     print(date, time_spent, len(night_mun_count))
+    if (i + 1) % 30 == 0:
+        logging.info(f'{date}, {time_spent} seconds, total_users: {len(night_mun_count)}')
 end = datetime.datetime.now()
 time_spent = (end - start).total_seconds()
 logging.info(f'Total time spend on night_mun_count {time_spent} seconds')
 print(f'Total time spend on night_mun_count {time_spent} seconds')
-# In[18]:
-
 
 uhome = {uid: max(stats, key=stats.get) for uid, stats in night_mun_count.items()}
 uhome = pd.Series(uhome).reset_index()
 uhome.columns = ['uid', 'home_munic']
+logging.info(f'n_user with night activity: {len(uhome)}, '
+             f'n_munic is home: {uhome.home_munic.nunique()}')
 
-# In[19]:
-
-
+# save memory
 del night_mun_count
-
 gc.collect()
 
-# In[21]:
-
-
+# =======================================
 # Get user activity count at tower level
-# [user][gtid]=count
-activity_count = {}
-
+# this is not done at the same time as above to save memory.
+# for users with at least 1 night activity
+print('Get user activity count at tower level')
+logging.info('Get user activity count at tower level')
+activity_count = {}  # [user][gtid]=count
 start = datetime.datetime.now()
-for date in dates:
+for i, date in enumerate(dates):
     path = f'stats/AggMexTwDyHrUnqUsrVOZ/{date}.json.gz'
     data = json.load(gzip.open(path))
     for subdate, agg in data.items():
-        update_single_count(agg, activity_count, kind='gtid', uid_set=set(uhome.uid.tolist()))
+        update_single_count(agg, activity_count, kind='gtid',
+                            uid_set=set(uhome.uid.tolist()))
     print(date, (datetime.datetime.now() - start).total_seconds(), len(activity_count))
+    if (i + 1) % 30 == 0:
+        logging.info(f'{date}, {time_spent} seconds')
 end = datetime.datetime.now()
 time_spent = (end - start).total_seconds()
-logging.info(f'Total time spend on activity_count {time_spent} seconds')
-print(f'Total time spend on activity_count {time_spent} seconds')
+logging.info(f'Total time spend on activity_count: {time_spent} seconds')
+print(f'Total time spend on activity_count: {time_spent} seconds')
 
 # In[23]:
 
 
 uhome['total_presence'] = uhome.uid.apply(lambda x: sum(activity_count[x].values()) if x in activity_count else 0)
-logging.info(f'n_user before thres: {len(uhome)}')
-thres = len(dates) / 2  # Pappalardo et al 2016 once every two days on average
-uhome = uhome[uhome.total_presence > thres]
 uhome.set_index('uid', inplace=True)
-logging.info(f'thres={thres}, n_user after: {len(uhome)}')
-print(f'thres={thres}, n_user after: {len(uhome)}')
 
-
+# =========================================
 # # compute features
+logging.info('...Compute Features')
+
 
 # TODO:
 #  Maybe, RoG and entropy can be computed at daytime vs night time
-
-# In[25]:
-
 
 def get_mob_ftr(u_tower_count):
     u_gtids = list(u_tower_count.keys())
@@ -244,46 +206,85 @@ def get_mob_ftr(u_tower_count):
 
     # center of mass (i.e., the weighted mean point of thephone towers visited by an individual)
     center_mass = (u_gt_coord * u_freq_vec).sum(axis=0) / u_freq_vec.sum()
-
     ri_rcm_2 = ((u_gt_coord - center_mass) ** 2).sum(axis=1)
     ri_rcm_2_freq = ri_rcm_2 * u_freq
     rog = ri_rcm_2_freq.sum() / sum(u_freq)
     rog = np.sqrt(rog)  # in meters
 
     pi = u_freq / u_freq.sum()
-
     entropy = -sum(pi * np.log(pi))
-
     correct_entropy = -sum(pi * np.log(pi) * u_c_factor)
     return rog, entropy, correct_entropy
 
 
-# In[73]:
-
-
-# print('start on mob features')
-# start = datetime.datetime.now()
-# user_mob_feature = []
-# for i, uid in enumerate(uhome.index):
-#     if (i + 1) % 5e+4 == 0:
-#         print('working on mob features', i)
-#         if debug: break
-#     if not uid in activity_count:
-#         continue
-#     rog, ent, cent = get_mob_ftr(activity_count[uid])
-#     user_mob_feature.append({'uid': uid, 'RoG': rog, 'Entropy': ent, 'CorrectEntropy': cent})
-# user_mob_feature = pd.DataFrame(user_mob_feature)
-# user_mob_feature.set_index('uid', inplace=True)
-# end = datetime.datetime.now()
-# time_spent = (end - start).total_seconds()
-# logging.info(f'Total time spend on get_mob_ftr {time_spent} seconds')
-# print(f'Total time spend on get_mob_ftr {time_spent} seconds')
-
-# In[ ]:
-
-
+# ----------------------------------------
+print('start on mob features')
+print_freq = 1e+3 if debug else 1e+5
 start = datetime.datetime.now()
+user_mob_feature = []
+for i, uid in enumerate(uhome.index):
+    if (i + 1) % print_freq == 0:
+        print('working on mob features', i)
+        if debug: break
+    if (i + 1) % (5 * print_freq) == 0:
+        logging.info(f'working on mob features {i}')
+    if uid not in activity_count:  # I think this is not necessary
+        logging.info(f'{uid} not in activity count')
+        continue
+    rog, ent, cent = get_mob_ftr(activity_count[uid])
+    user_mob_feature.append({'uid': uid, 'RoG': rog,
+                             'Entropy': ent,
+                             'CorrectEntropy': cent})
+
+user_mob_feature = pd.DataFrame(user_mob_feature)
+user_mob_feature.set_index('uid', inplace=True)
+end = datetime.datetime.now()
+time_spent = (end - start).total_seconds()
+logging.info(f'Total time spend on get_mob_ftr: {time_spent} seconds')
+print(f'Total time spend on get_mob_ftr: {time_spent} seconds')
+
+# -----------------------------
+print('start on user_home_vs_nhome')
+start = datetime.datetime.now()
+print_freq = 1e+3 if debug else 1e+5
 user_home_vs_nhome = []
+for i, uid in enumerate(uhome.index):
+    if (i + 1) % print_freq == 0:
+        print('working on home vs non-home presence', i)
+        if debug: break
+    if (i + 1) % (5 * print_freq) == 0:
+        logging.info(f'working on home vs non-home presence {i}')
+    if uid not in activity_count:  # I think this is not necessary
+        logging.info(f'{uid} not in activity count')
+        continue
+    home_munic_count = 0
+    non_home_count = 0
+    home_munic_u = uhome.loc[uid].home_munic
+    for gtid, count in activity_count[uid].items():
+        # user *uid* appear at tower *gtid* *count* times
+        current_munic_u = gt2munic[gtid]
+        if current_munic_u == home_munic_u:
+            home_munic_count += count
+        else:
+            non_home_count += count
+    user_home_vs_nhome.append({'uid': uid, 'home_presence': home_munic_count, 'non_home_presence': non_home_count})
+
+user_home_vs_nhome = pd.DataFrame(user_home_vs_nhome).set_index('uid')
+end = datetime.datetime.now()
+time_spent = (end - start).total_seconds()
+logging.info(f'Total time spend on user_home_vs_nhome: {time_spent} seconds')
+print(f'Total time spend on user_home_vs_nhome: {time_spent} seconds')
+
+# saving individual features
+uhome.join(user_home_vs_nhome, how='outer') \
+    .join(user_mob_feature, how='outer') \
+    .to_csv(f'data/Study2_individual_features-{version}{debug_str}.csv.gz')
+# save memory
+del user_home_vs_nhome, user_mob_feature
+gc.collect()
+
+# ------------------------------------
+print('start on municipality flow')
 # in flow: groupby src,
 # - n_in_munic: count n_unique dst,
 # - n_in_users: sum n_unique users of different dst (no duplicates because users has one unique home)
@@ -292,55 +293,48 @@ user_home_vs_nhome = []
 # out flow: groupby dst, the rest replace dst in above with src.
 # same definition of OD as SafeGraph Covid Dataset.
 # if src==dst, not sure if self-loop is necessary, but keep it anyway in case it could be useful.
+
 # munic level, {(src, dst): total presence at *dst* from all user with home at *src*}
 munic_flow_count = defaultdict(int)
 # munic level, {(src, dst): unique users whose home at *src* has been to *dst*}
 munic_flow_unique_user = defaultdict(set)
 
+start = datetime.datetime.now()
 print_freq = 1e+3 if debug else 1e+5
-print('start on user_home_vs_nhome')
 for i, uid in enumerate(uhome.index):
     if (i + 1) % print_freq == 0:
-        print('working on home vs non-home presence', i)
+        print('working on municipality flow', i)
         if debug: break
-    if not uid in activity_count:
-        continue
-    home_munic_count = 0
-    non_home_count = 0
+    if (i + 1) % (5 * print_freq) == 0:
+        logging.info(f'working on municipality flow {i}')
+
     home_munic_u = uhome.loc[uid].home_munic
+    total_presence = uhome.loc[uid].total_presence
     for gtid, count in activity_count[uid].items():
         # user *uid* appear at tower *gtid* *count* times
         current_munic_u = gt2munic[gtid]
         # it's ok if current==home, it is self-loop.
-        munic_flow_count[(home_munic_u, current_munic_u)] += count  # (src, dst) add activity count
-        munic_flow_unique_user[(home_munic_u, current_munic_u)].add(uid)  # update unique_user for (src, dst)
-        if current_munic_u == home_munic_u:
-            home_munic_count += count
-        else:
-            non_home_count += count
-    user_home_vs_nhome.append({'uid': uid, 'home_presence': home_munic_count, 'non_home_presence': non_home_count})
-
-# user_home_vs_nhome = pd.DataFrame(user_home_vs_nhome).set_index('uid')
-
-end = datetime.datetime.now()
-time_spent = (end - start).total_seconds()
-logging.info(f'Total time spend on user_home_vs_nhome and munic_flow {time_spent} seconds')
-print(f'Total time spend on user_home_vs_nhome and munic_flow {time_spent} seconds')
-# saving individual features
-# uhome.join(user_home_vs_nhome).join(user_mob_feature).to_csv(f'data/Study2_individual_features{debug_str}.csv.gz')
+        # TODO: cannot loop threshold. run extremely long and got killed supposedly bc. out-of-memory
+        #  Also, need to think how to assign home municipalities better to cover more.
+        for thres in [1, 5, 10, 24, 50, 80]:
+            # if a user's activity is less than thres, ignore it.
+            # but to keep results for different threshold, add thres as a key to the OD.
+            if total_presence < thres:
+                continue
+            munic_flow_count[(home_munic_u, current_munic_u, thres)] += count  # (src, dst, thres) add activity count
+            # update unique_user for (src, dst, thres)
+            munic_flow_unique_user[(home_munic_u, current_munic_u, thres)].add(uid)
 
 # saving munic level od flow features
 munic_flow_count = pd.Series(munic_flow_count).reset_index()
-munic_flow_count.columns = ['src', 'dst', 'activity']
+munic_flow_count.columns = ['src', 'dst', 'thres', 'activity']
 munic_flow_unique_user = pd.Series(munic_flow_unique_user).reset_index()
 munic_flow_unique_user[0] = munic_flow_unique_user[0].apply(len)
-munic_flow_unique_user.columns = ['src', 'dst', 'n_user']
+munic_flow_unique_user.columns = ['src', 'dst', 'thres', 'n_user']
 munic_od = munic_flow_count.merge(munic_flow_unique_user)
-munic_od.to_csv(f'data/Study2_municipality_OD_mat{debug_str}.csv')
-# don't count self-loop
-munic_od_ftr = munic_od[munic_od.src != munic_od.dst].groupby('src').agg(
-    {'dst': 'count', 'activity': ['sum', 'std'], 'n_user': ['sum', 'std']})
-munic_od_ftr.columns = ['_'.join(col).strip() for col in munic_od_ftr.columns.values]
-munic_od_ftr.to_csv(f'data/Study2_municipality_flow_ftr{debug_str}.csv')
+logging.info(f'n_munic in src: {munic_od.src.nunique()}, '
+             f'n_munic in dst: {munic_od.dst.nunique()}')
+munic_od.to_csv(f'data/Study2_municipality_OD_mat-{version}{debug_str}.csv')
 
 print('done')
+logging.info('---------------------------------')
